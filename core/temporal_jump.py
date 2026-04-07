@@ -13,6 +13,7 @@ This is the AI equivalent of the brain's "neural jump back in time."
 """
 
 import ollama
+import os
 from .database import get_connection, new_id
 from .workspace import WorkspaceManager
 from .epoch import EpochManager
@@ -72,35 +73,66 @@ class TemporalJumpEngine:
             else []
         )
 
-        # Build the temporal jump prompt
+        # Calculate Mathematical Semantic Delta
+        continuities = []
+        additions = []
+        evolutions = []
+        
+        from_ids = {m["id"]: m for m in from_memories}
+        
+        for tm in to_memories:
+            if tm["id"] in from_ids:
+                continuities.append(tm)
+            else:
+                history = memory_store.get_version_history(tm["id"])
+                evolved_from = None
+                for old_v in history:
+                    if old_v["id"] in from_ids:
+                        evolved_from = from_ids[old_v["id"]]
+                        break
+                
+                if evolved_from:
+                    evolutions.append({
+                        "from": evolved_from,
+                        "to": tm,
+                        "reason": tm.get("update_reason", "No reason provided")
+                    })
+                else:
+                    additions.append(tm)
+
+        # Build the structured temporal jump prompt
         prompt = self._build_prompt(
             workspace_name=workspace_name,
             from_epoch=from_epoch_name,
             to_epoch=to_epoch_name,
-            from_memories=from_memories,
-            to_memories=to_memories,
+            continuities=continuities,
+            additions=additions,
+            evolutions=evolutions,
             query=query,
         )
 
-        print(f"[TemporalJump] Jumping: '{from_epoch_name}' → '{to_epoch_name}' in workspace '{workspace_name}'...")
+        print(f"[TemporalJump] Jumping: '{from_epoch_name}' -> '{to_epoch_name}' in workspace '{workspace_name}'...")
 
-        # Run through local LLM
-        response = ollama.chat(
-            model=MODEL,
-            messages=[
-                {
-                    "role": "system",
-                    "content": (
-                        "You are the TLCM Temporal Analysis Engine. Your job is to reason about "
-                        "how a given context evolved across time. Be specific, honest, and analytical. "
-                        "Do not hallucinate — only reference the facts provided."
-                    ),
-                },
-                {"role": "user", "content": prompt},
-            ],
-            options={"num_ctx": 2048}
-        )
-        result = response["message"]["content"]
+        # Run through local LLM (or return raw prompt in test mode)
+        if os.environ.get("TLCM_TEST_MODE") == "1":
+            result = prompt
+        else:
+            response = ollama.chat(
+                model=MODEL,
+                messages=[
+                    {
+                        "role": "system",
+                        "content": (
+                            "You are the TLCM Temporal Analysis Engine. Your job is to reason about "
+                            "how a given context evolved across time. Be specific, honest, and analytical. "
+                            "Do not hallucinate -- only reference the facts provided."
+                        ),
+                    },
+                    {"role": "user", "content": prompt},
+                ],
+                options={"num_ctx": 2048}
+            )
+            result = response["message"]["content"]
 
         # Log the jump
         conn = get_connection()
@@ -126,26 +158,39 @@ class TemporalJumpEngine:
         workspace_name: str,
         from_epoch: str,
         to_epoch: str,
-        from_memories: list[dict],
-        to_memories: list[dict],
+        continuities: list[dict],
+        additions: list[dict],
+        evolutions: list[dict],
         query: str = None,
     ) -> str:
-        base = f"""
-TEMPORAL JUMP ANALYSIS
-Workspace: {workspace_name}
-
-═══ STATE DURING: {from_epoch} ═══
-{_format_memories(from_memories)}
-
-═══ STATE DURING: {to_epoch} ═══
-{_format_memories(to_memories)}
-
-Your task:
-1. Reason from WITHIN the '{from_epoch}' world-state first. What was true? What was uncertain?
-2. Identify every significant change between '{from_epoch}' and '{to_epoch}'.
-3. Map the arc: how did things evolve? What caused the shifts?
-4. Highlight what STAYED THE SAME across both epochs (continuity matters).
-5. What does this arc reveal about the trajectory of '{workspace_name}'?
+        base = f"TEMPORAL JUMP ANALYSIS\nWorkspace: {workspace_name}\n"
+        base += f"Jumping from '{from_epoch}' to '{to_epoch}'.\n\n"
+        base += "Here is the explicitly calculated strict mathematical delta between the two states:\n\n"
+        
+        if continuities:
+            base += "🟢 CONTINUITIES (Stayed the same):\n"
+            for m in continuities:
+                base += f" - {m['content']}\n"
+            base += "\n"
+            
+        if additions:
+            base += "🔵 NEW BELIEFS (Added):\n"
+            for m in additions:
+                base += f" - {m['content']}\n"
+            base += "\n"
+            
+        if evolutions:
+            base += "🟡 EVOLUTIONS (Changed/Updated):\n"
+            for ev in evolutions:
+                base += f" - OLD ({from_epoch}): {ev['from']['content']}\n"
+                base += f"   NEW ({to_epoch}): {ev['to']['content']}\n"
+                base += f"   REASON: {ev['reason']}\n\n"
+            
+        base += """Your task:
+1. Summarize the meaning of this explicitly provided semantic delta.
+2. Do NOT hallucinate changes; only refer to the facts provided above in the Continuties, Additions, and Evolutions.
+3. How did the world-state evolve and what caused the shifts?
+4. What does this reveal about the trajectory of the workspace?
 """
         if query:
             base += f"\nSpecific question to answer: {query}"

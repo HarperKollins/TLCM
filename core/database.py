@@ -62,6 +62,8 @@ def init_db():
             confidence REAL DEFAULT 1.0,
             source TEXT DEFAULT 'user_stated',        -- user_stated | inferred | updated
             tags TEXT,                                -- JSON array of tags
+            recall_count INTEGER DEFAULT 0,           -- Biological decay: frequency
+            last_recalled_at TEXT,                    -- Biological decay: recency
             created_at TEXT DEFAULT (datetime('now')),
             archived_at TEXT                          -- Set when superseded
         );
@@ -94,6 +96,13 @@ def init_db():
         CREATE INDEX IF NOT EXISTS idx_memories_parent ON memories(parent_id);
         CREATE INDEX IF NOT EXISTS idx_epochs_workspace ON epochs(workspace_id);
     """)
+
+    # Safely try to add new columns to an existing DB (migration)
+    try:
+        cursor.execute("ALTER TABLE memories ADD COLUMN recall_count INTEGER DEFAULT 0")
+        cursor.execute("ALTER TABLE memories ADD COLUMN last_recalled_at TEXT")
+    except sqlite3.OperationalError:
+        pass  # Columns already exist
 
     conn.commit()
     conn.close()

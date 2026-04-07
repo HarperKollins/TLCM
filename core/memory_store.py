@@ -43,32 +43,38 @@ class MemoryStore:
 
         memory_id = new_id()
         conn = get_connection()
-        conn.execute(
-            """INSERT INTO memories
-               (id, workspace_id, epoch_id, content, version, source, tags)
-               VALUES (?, ?, ?, ?, 1, ?, ?)""",
-            (
-                memory_id,
-                workspace["id"],
-                epoch["id"],
-                content,
-                source,
-                json.dumps(tags or []),
-            ),
-        )
-        conn.commit()
-        conn.close()
+        try:
+            conn.execute(
+                """INSERT INTO memories
+                   (id, workspace_id, epoch_id, content, version, source, tags)
+                   VALUES (?, ?, ?, ?, 1, ?, ?)""",
+                (
+                    memory_id,
+                    workspace["id"],
+                    epoch["id"],
+                    content,
+                    source,
+                    json.dumps(tags or []),
+                ),
+            )
 
-        # Store embedding for semantic search
-        embedding_engine.embed_and_store(
-            memory_id=memory_id,
-            content=content,
-            workspace_name=workspace_name,
-            epoch_name=epoch["name"],
-        )
+            # Store embedding for semantic search
+            embedding_engine.embed_and_store(
+                memory_id=memory_id,
+                content=content,
+                workspace_name=workspace_name,
+                epoch_name=epoch["name"],
+            )
 
-        print(f"[Memory] Stored in '{workspace_name}' / '{epoch['name']}'")
-        return {"id": memory_id, "workspace": workspace_name, "epoch": epoch["name"]}
+            conn.commit()
+            print(f"[Memory] Stored in '{workspace_name}' / '{epoch['name']}'")
+            return {"id": memory_id, "workspace": workspace_name, "epoch": epoch["name"]}
+        except Exception as e:
+            conn.rollback()
+            print(f"[Memory Store] ERR: Memory isolated storage rolled back due to error: {e}")
+            raise e
+        finally:
+            conn.close()
 
     def update(
         self,
@@ -83,58 +89,62 @@ class MemoryStore:
         The old memory is preserved as historical truth.
         """
         conn = get_connection()
+        try:
+            # Fetch the old memory
+            old = conn.execute(
+                "SELECT * FROM memories WHERE id = ? AND is_current = 1", (memory_id,)
+            ).fetchone()
 
-        # Fetch the old memory
-        old = conn.execute(
-            "SELECT * FROM memories WHERE id = ? AND is_current = 1", (memory_id,)
-        ).fetchone()
+            if not old:
+                raise ValueError(f"Memory {memory_id} not found or already archived.")
 
-        if not old:
+            old = dict(old)
+
+            # Archive the old version
+            conn.execute(
+                "UPDATE memories SET is_current = 0, archived_at = ? WHERE id = ?",
+                (datetime.now().isoformat(), memory_id),
+            )
+
+            # Create the new version (linked to the old via parent_id)
+            new_id_ = new_id()
+            conn.execute(
+                """INSERT INTO memories
+                   (id, workspace_id, epoch_id, content, version, parent_id, update_reason, source)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, 'updated')""",
+                (
+                    new_id_,
+                    old["workspace_id"],
+                    old["epoch_id"],
+                    new_content,
+                    old["version"] + 1,
+                    memory_id,
+                    reason,
+                ),
+            )
+
+            # Update the embedding
+            embedding_engine.embed_and_store(
+                memory_id=new_id_,
+                content=new_content,
+                workspace_name=workspace_name,
+                epoch_name="",
+            )
+
+            conn.commit()
+            print(f"[Memory] Updated to v{old['version'] + 1} — old version preserved.")
+            return {
+                "new_id": new_id_,
+                "old_id": memory_id,
+                "version": old["version"] + 1,
+                "reason": reason,
+            }
+        except Exception as e:
+            conn.rollback()
+            print(f"[Memory Store] ERR: Memory update rolled back due to error: {e}")
+            raise e
+        finally:
             conn.close()
-            raise ValueError(f"Memory {memory_id} not found or already archived.")
-
-        old = dict(old)
-
-        # Archive the old version
-        conn.execute(
-            "UPDATE memories SET is_current = 0, archived_at = ? WHERE id = ?",
-            (datetime.now().isoformat(), memory_id),
-        )
-
-        # Create the new version (linked to the old via parent_id)
-        new_id_ = new_id()
-        conn.execute(
-            """INSERT INTO memories
-               (id, workspace_id, epoch_id, content, version, parent_id, update_reason, source)
-               VALUES (?, ?, ?, ?, ?, ?, ?, 'updated')""",
-            (
-                new_id_,
-                old["workspace_id"],
-                old["epoch_id"],
-                new_content,
-                old["version"] + 1,
-                memory_id,
-                reason,
-            ),
-        )
-        conn.commit()
-        conn.close()
-
-        # Update the embedding
-        embedding_engine.embed_and_store(
-            memory_id=new_id_,
-            content=new_content,
-            workspace_name=workspace_name,
-            epoch_name="",
-        )
-
-        print(f"[Memory] Updated to v{old['version'] + 1} — old version preserved.")
-        return {
-            "new_id": new_id_,
-            "old_id": memory_id,
-            "version": old["version"] + 1,
-            "reason": reason,
-        }
 
     def get_version_history(self, memory_id: str) -> list[dict]:
         """
@@ -201,20 +211,38 @@ class MemoryStore:
         if not semantic_results:
             return []
 
-        # Enrich with SQLite metadata
+        # Enrich with SQLite metadata and process biological frequency
         conn = get_connection()
         enriched = []
-        for result in semantic_results[:limit]:
-            mem = conn.execute(
-                "SELECT * FROM memories WHERE id = ?", (result["memory_id"],)
-            ).fetchone()
-            if mem:
-                m = dict(mem)
-                if current_only and not m["is_current"]:
-                    continue
-                m["relevance_score"] = result["score"]
-                enriched.append(m)
-        conn.close()
+        try:
+            now_iso = datetime.now().isoformat()
+            for result in semantic_results[:limit]:
+                mem = conn.execute(
+                    "SELECT * FROM memories WHERE id = ?", (result["memory_id"],)
+                ).fetchone()
+                if mem:
+                    m = dict(mem)
+                    if current_only and not m["is_current"]:
+                        continue
+                    m["relevance_score"] = result["score"]
+                    enriched.append(m)
+                    
+                    # Biological Decay: Increase recall frequency and score when retrieved
+                    conn.execute(
+                        """UPDATE memories 
+                           SET recall_count = recall_count + 1, 
+                               last_recalled_at = ?,
+                               confidence = MIN(1.0, confidence + 0.05) 
+                           WHERE id = ?""",
+                        (now_iso, m["id"])
+                    )
+            conn.commit()
+        except Exception as e:
+            conn.rollback()
+            print(f"[Memory Store] ERR: Recall persistence failed: {e}")
+        finally:
+            conn.close()
+
         return enriched
 
     def recall_epoch_state(self, workspace_id: str, epoch_id: str) -> list[dict]:
@@ -230,3 +258,29 @@ class MemoryStore:
         ).fetchall()
         conn.close()
         return [dict(r) for r in rows]
+
+    def decay_memories(self):
+        """
+        Biological Decay: Automatically lowers confidence of old memories.
+        Should be called periodically (e.g. daily cron job or during startup).
+        """
+        conn = get_connection()
+        try:
+            # Reduce confidence by 0.05 for memories not recalled in > 1 day.
+            conn.execute(
+                """
+                UPDATE memories 
+                SET confidence = MAX(0.1, confidence - 0.05)
+                WHERE is_current = 1 
+                  AND (last_recalled_at IS NULL OR julianday('now') - julianday(last_recalled_at) > 1)
+                """
+            )
+            # Re-normalize recall count periodically to smooth it out
+            conn.execute("UPDATE memories SET recall_count = recall_count / 2 WHERE recall_count > 0")
+            conn.commit()
+            print("[Memory] Biological decay algorithm applied.")
+        except Exception as e:
+            conn.rollback()
+            print(f"[Memory Store] Decay ERR: {e}")
+        finally:
+            conn.close()

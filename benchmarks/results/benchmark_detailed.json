@@ -1,0 +1,176 @@
+{
+  "summary": {
+    "timestamp": "2026-04-07 19:12:16",
+    "config": "TLCM Full (all features enabled)",
+    "total_memories": 200,
+    "total_updates": 45,
+    "update_success_rate": "45/45",
+    "ingest_time_s": 71.14,
+    "ingest_per_memory_s": 0.3557,
+    "update_time_s": 18.42,
+    "isolation": "PASS",
+    "isolation_violations": 0,
+    "point_in_time_accuracy": 1.0,
+    "evolution_tracking_accuracy": 1.0,
+    "decayed_memories": 7,
+    "delta_computed": true
+  },
+  "point_in_time_detail": [
+    {
+      "id": "Q01",
+      "correct": true,
+      "memories_checked": 20
+    },
+    {
+      "id": "Q02",
+      "correct": true,
+      "memories_checked": 20
+    },
+    {
+      "id": "Q03",
+      "correct": true,
+      "memories_checked": 20
+    },
+    {
+      "id": "Q04",
+      "correct": true,
+      "memories_checked": 20
+    },
+    {
+      "id": "Q05",
+      "correct": true,
+      "memories_checked": 20
+    },
+    {
+      "id": "Q06",
+      "correct": true,
+      "memories_checked": 20
+    },
+    {
+      "id": "Q07",
+      "correct": true,
+      "memories_checked": 20
+    },
+    {
+      "id": "Q08",
+      "correct": true,
+      "memories_checked": 20
+    },
+    {
+      "id": "Q09",
+      "correct": true,
+      "memories_checked": 20
+    },
+    {
+      "id": "Q10",
+      "correct": true,
+      "memories_checked": 20
+    }
+  ],
+  "evolution_detail": [
+    {
+      "id": "Q11",
+      "has_version_chain": true,
+      "version_count": 20
+    },
+    {
+      "id": "Q12",
+      "has_version_chain": true,
+      "version_count": 25
+    },
+    {
+      "id": "Q13",
+      "has_version_chain": true,
+      "version_count": 20
+    },
+    {
+      "id": "Q14",
+      "has_version_chain": true,
+      "version_count": 25
+    },
+    {
+      "id": "Q15",
+      "has_version_chain": true,
+      "version_count": 20
+    },
+    {
+      "id": "Q16",
+      "has_version_chain": true,
+      "version_count": 25
+    },
+    {
+      "id": "Q17",
+      "has_version_chain": true,
+      "version_count": 20
+    },
+    {
+      "id": "Q18",
+      "has_version_chain": true,
+      "version_count": 25
+    },
+    {
+      "id": "Q19",
+      "has_version_chain": true,
+      "version_count": 20
+    },
+    {
+      "id": "Q20",
+      "has_version_chain": true,
+      "version_count": 25
+    }
+  ],
+  "decay_detail": {
+    "decayed_count": 7,
+    "fresh_count": 193,
+    "decayed_samples": [
+      {
+        "content": "Safety protocol requires fume hood for all synthes",
+        "confidence": 0.95
+      },
+      {
+        "content": "Weekly standup meetings on Tuesdays at 10am.",
+        "confidence": 0.95
+      },
+      {
+        "content": "Equipment calibration needed for spectrometer.",
+        "confidence": 0.95
+      },
+      {
+        "content": "Safety incident: minor spill in Lab 3, no injuries",
+        "confidence": 0.95
+      },
+      {
+        "content": "All lab notebooks digitized and archived.",
+        "confidence": 0.95
+      }
+    ]
+  },
+  "delta_detail": [
+    {
+      "workspace": "Research Lab",
+      "from": "Hypothesis",
+      "to": "Publication",
+      "has_additions": true,
+      "has_continuities": false,
+      "has_evolutions": false,
+      "delta_length": 1725
+    },
+    {
+      "workspace": "Supply Chain",
+      "from": "Assessment",
+      "to": "Optimization",
+      "has_additions": true,
+      "has_continuities": false,
+      "has_evolutions": false,
+      "delta_length": 1557
+    }
+  ],
+  "isolation_detail": {
+    "pass": true,
+    "violations": [],
+    "counts": {
+      "Research Lab": 100,
+      "Supply Chain": 100
+    }
+  }
+}

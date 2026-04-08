@@ -1,3 +1,6 @@
 timestamp,config,total_memories,total_updates,update_success_rate,ingest_time_s,ingest_per_memory_s,update_time_s,isolation,isolation_violations,point_in_time_accuracy,evolution_tracking_accuracy,decayed_memories,delta_computed
 2026-04-07 19:08:17,TLCM Full (all features enabled),200,45,45/45,148.56,0.7428,7.67,FAIL,3,1.0,1.0,200,True
 2026-04-07 19:12:16,TLCM Full (all features enabled),200,45,45/45,71.14,0.3557,18.42,PASS,0,1.0,1.0,7,True
+2026-04-07 19:28:31,TLCM Full (all features enabled),200,45,45/45,61.69,0.3084,10.92,PASS,0,1.0,1.0,7,True
+2026-04-08 18:27:47,Baseline: Plain ChromaDB,200,45,45/45,2.82,0.0141,1.19,PASS,0,0.5,0.0,0,False
+2026-04-08 18:28:57,Baseline: SQLite Only,200,45,45/45,0.22,0.0011,0.1,PASS,0,1.0,1.0,0,False

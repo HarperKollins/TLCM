@@ -1,13 +1,13 @@
 {
   "summary": {
-    "timestamp": "2026-04-07 19:12:16",
+    "timestamp": "2026-04-07 19:28:31",
     "config": "TLCM Full (all features enabled)",
     "total_memories": 200,
     "total_updates": 45,
     "update_success_rate": "45/45",
-    "ingest_time_s": 71.14,
-    "ingest_per_memory_s": 0.3557,
-    "update_time_s": 18.42,
+    "ingest_time_s": 61.69,
+    "ingest_per_memory_s": 0.3084,
+    "update_time_s": 10.92,
     "isolation": "PASS",
     "isolation_violations": 0,
     "point_in_time_accuracy": 1.0,

@@ -1,8 +1,9 @@
 """
 TLCM Conversational Interface
 A natural language interface that wraps all four TLCM principles
-into a simple chat loop powered by llama3.2 via Ollama.
+into a simple chat loop powered by Gemini 3.1 Flash Lite API.
 
+v0.4: Migrated from Ollama/gemma2:2b to Gemini API.
 The AI:
 - Always knows which workspace it's in
 - Can recall memories semantically
@@ -11,18 +12,22 @@ The AI:
 - Can perform temporal jumps on command
 """
 
-import ollama
+import os
+from pathlib import Path
+from dotenv import load_dotenv
 from .memory_store import MemoryStore
 from .workspace import WorkspaceManager
 from .epoch import EpochManager
 from .temporal_jump import TemporalJumpEngine
+
+load_dotenv(Path(__file__).parent.parent / ".env")
 
 memory = MemoryStore()
 workspaces = WorkspaceManager()
 epochs = EpochManager()
 jumper = TemporalJumpEngine()
 
-MODEL = "gemma2:2b"
+GEMINI_MODEL = "gemini-3.1-flash-lite-preview"
 
 SYSTEM_PROMPT = """You are an AI assistant with TLCM (Temporal Layered Context Memory).
 You are operating within a specific workspace context. You have access to relevant memories
@@ -35,6 +40,33 @@ Your behavior:
 - Never mix information from different workspaces unless explicitly told to
 - If the user asks about the past, you can perform a temporal jump
 """
+
+
+def _call_gemini(system_prompt: str, messages: list[dict]) -> str:
+    """Call Gemini API for chat. Falls back to error message."""
+    from google import genai
+    api_key = os.environ.get("GEMINI_API_KEY")
+    if not api_key:
+        return "[Error] GEMINI_API_KEY not set. Cannot chat."
+    
+    client = genai.Client(api_key=api_key)
+    
+    # Build a single prompt from message history
+    prompt_parts = [f"SYSTEM: {system_prompt}\n"]
+    for msg in messages:
+        role = msg["role"].upper()
+        prompt_parts.append(f"{role}: {msg['content']}")
+    
+    full_prompt = "\n\n".join(prompt_parts)
+    
+    try:
+        response = client.models.generate_content(
+            model=GEMINI_MODEL,
+            contents=full_prompt,
+        )
+        return response.text
+    except Exception as e:
+        return f"[Error] Gemini API call failed: {e}"
 
 
 class TLCMChat:
@@ -78,14 +110,11 @@ class TLCMChat:
         # Add to conversation history
         self.history.append({"role": "user", "content": user_input})
 
-        # Query LLM
-        messages = [{"role": "system", "content": full_system}] + self.history
+        # Query Gemini
+        reply = _call_gemini(full_system, self.history)
 
-        response = ollama.chat(model=MODEL, messages=messages, options={"num_ctx": 2048})
-        assistant_reply = response["message"]["content"]
-
-        self.history.append({"role": "assistant", "content": assistant_reply})
-        return assistant_reply
+        self.history.append({"role": "assistant", "content": reply})
+        return reply
 
     def remember_this(self, content: str, reason: str = "user_stated") -> str:
         """Explicitly store a memory in the current workspace/epoch."""

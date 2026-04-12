@@ -51,82 +51,105 @@ The algorithm walks the `parent_id` version chains and categorizes every memory 
 | **Evolution** | Memory exists in both epochs, but version changed | `parent_id(to) ∈ from_ids` |
 | **Addition** | Memory exists only in the target epoch | `to_ids \ from_ids \ evolved_ids` |
 
-The LLM (locally via `Ollama`) only receives this **pre-computed structured delta** and is asked to summarize its meaning — not to calculate it. This eliminates hallucinated changes and semantic drift.
+The LLM (via `Gemini 3.1 Flash Lite` API) only receives this **pre-computed structured delta** and is asked to summarize its meaning — not to calculate it. This eliminates hallucinated changes and semantic drift.
 
 ---
 
-## Biological Decay Algorithm
+## Neuro-Weighted Biological Decay Algorithm (v0.4)
 
-Inspired by the Ebbinghaus Forgetting Curve from human physiology, TLCM implements a **biological decay mechanism** for memory confidence:
+Inspired by the Ebbinghaus Forgetting Curve and extended with **emotional reconsolidation theory**, TLCM v0.4 implements a **neuro-weighted decay mechanism** where emotional intensity and urgency directly affect how fast memories fade.
 
-### The Math
+### The Neuro-Weighted Fields
 
-Each memory has three decay-related fields:
+Every memory now carries 7 decay-related fields (4 new in v0.4 via Gemini Judge):
 
-| Field | Type | Purpose |
-|---|---|---|
-| `confidence` | `REAL` (0.1 — 1.0) | Current belief strength |
-| `recall_count` | `INTEGER` | Times this memory has been retrieved |
-| `last_recalled_at` | `TEXT` (ISO datetime) | Timestamp of last retrieval |
+| Field | Type | Purpose | Source |
+|---|---|---|---|
+| `confidence` | `REAL` (0.1 — 1.0) | Current belief strength | System |
+| `recall_count` | `INTEGER` | Times this memory has been retrieved | System |
+| `last_recalled_at` | `TEXT` (ISO datetime) | Timestamp of last retrieval | System |
+| `emotional_valence` | `INTEGER` (-10 to +10) | Emotional intensity & direction | **Gemini Judge** |
+| `urgency_score` | `INTEGER` (0 to 10) | Time-criticality | **Gemini Judge** |
+| `semantic_impact` | `INTEGER` (0 to 10) | Knowledge-shifting magnitude | **Gemini Judge** |
+| `reconsolidation_flag` | `TEXT` (enum) | Relationship to existing beliefs | **Gemini Judge** |
 
 **On Recall (Strengthening):**
 ```
 confidence = MIN(1.0, confidence + 0.05)
 recall_count += 1
 last_recalled_at = NOW()
+effective_confidence = confidence * (1 + urgency/20 + |emotion|/20)
 ```
 
-**On Decay (Periodic weakening of dormant memories):**
+**On Decay (Neuro-weighted weakening):**
 ```
-IF (julianday('now') - julianday(last_recalled_at)) > 1 day:
-    confidence = MAX(0.1, confidence - 0.05)
+neuro_boost = 1.0 + urgency_score/10.0 + ABS(emotional_valence)/10.0
+decay_rate = 0.05 / neuro_boost
+
+IF (days_since_recall > 1):
+    confidence = MAX(0.1, confidence - decay_rate)
     recall_count = recall_count / 2
 ```
 
-Memories that are never recalled gradually fade. Memories that are frequently recalled strengthen. The floor of `0.1` prevents total erasure — the system never forgets, it just reduces confidence.
+**Key insight**: A memory about a company pivot (urgency=9, emotion=+7) decays at `0.05 / 2.6 = 0.019` per cycle — **2.6x slower** than a trivial note (urgency=2, emotion=0, decay rate = 0.05 / 1.2 = 0.042). This mirrors human reconsolidation: emotionally significant events persist longer in long-term memory.
+
+### Reconsolidation Flags
+
+| Flag | Meaning | Effect |
+|---|---|---|
+| `append` | New independent fact | Normal decay |
+| `strengthen` | Reinforces existing knowledge | Boosts related memories |
+| `weaken` | Casts doubt on existing beliefs | Flags for review |
+| `contradicts_core` | Directly opposes a fundamental belief | Triggers version chain audit |
 
 ---
 
-## Architecture Stack
+## Architecture Stack — v0.4 "Slim Node" Hybrid
 
 ```
-┌──────────────────────────────────────────────────┐
-│                   TLCM ENGINE                     │
-├──────────────────────────────────────────────────┤
-│  CLI (Typer + Rich)     │    API (FastAPI)        │
-├──────────────────────────────────────────────────┤
-│              Core Python Logic                    │
-│  ┌────────────┐ ┌────────────┐ ┌──────────────┐  │
-│  │MemoryStore │ │EpochManager│ │TemporalJump  │  │
-│  │ (remember, │ │ (create,   │ │ (delta calc, │  │
-│  │  update,   │ │  archive,  │ │  LLM summary,│  │
-│  │  recall,   │ │  activate) │ │  belief arc) │  │
-│  │  decay)    │ │            │ │              │  │
-│  └──────┬─────┘ └────────────┘ └──────────────┘  │
-│         │                                         │
-│  ┌──────┴──────────────────────────────────────┐  │
-│  │        Transaction Safety Layer              │  │
-│  │  try { SQLite + ChromaDB } catch { rollback }│  │
-│  └──────┬───────────────┬──────────────────────┘  │
-│         │               │                         │
-│  ┌──────┴─────┐  ┌──────┴──────┐                  │
-│  │  SQLite    │  │  ChromaDB   │                  │
-│  │  (Truth)   │  │  (Search)   │                  │
-│  │  Versions, │  │  Embeddings,│                  │
-│  │  Epochs,   │  │  1 collection│                 │
-│  │  Chains    │  │  per workspace│                │
-│  └────────────┘  └─────────────┘                  │
-│         │               │                         │
-│  ┌──────┴───────────────┴──────────────────────┐  │
-│  │             Ollama (Local LLM)               │  │
-│  │  gemma2:2b — embeddings + temporal analysis  │  │
-│  └──────────────────────────────────────────────┘  │
-├──────────────────────────────────────────────────┤
-│  Visual Mind UI: React + Vite (Phase 3)          │
-└──────────────────────────────────────────────────┘
+┌───────────────────────────────────────────────────────────────┐
+│                    TLCM ENGINE v0.4                            │
+│                   "Slim Node" Hybrid                          │
+├───────────────────────────────────────────────────────────────┤
+│  CLI (Typer + Rich)       │    API (FastAPI + SSE)            │
+├───────────────────────────────────────────────────────────────┤
+│  ┌──────────────────────────────────────────────────────────┐ │
+│  │              Async Tiered Memory Bus                      │ │
+│  │  ┌──────────────┐     ┌───────────────────────────────┐  │ │
+│  │  │ Tier 1 (STM) │────>│ Tier 2 (LTM) Background Worker│  │ │
+│  │  │ asyncio.Queue│     │ Gemini Judge → SQLite → Chroma │  │ │
+│  │  │ Instant ACK  │     │ SSE push on completion         │  │ │
+│  │  └──────────────┘     └───────────────────────────────┘  │ │
+│  └──────────────────────────────────────────────────────────┘ │
+│                                                               │
+│              Core Python Logic                                │
+│  ┌────────────┐ ┌────────────┐ ┌──────────────┐              │
+│  │MemoryStore │ │EpochManager│ │TemporalJump  │              │
+│  │ (commit,   │ │ (create,   │ │ (delta calc, │              │
+│  │  update,   │ │  archive,  │ │  Gemini sum., │              │
+│  │  recall,   │ │  activate) │ │  belief arc) │              │
+│  │  decay)    │ │            │ │              │              │
+│  └──────┬─────┘ └────────────┘ └──────────────┘              │
+│         │                                                     │
+│  ┌──────┴──────────────────────────────────────────────────┐  │
+│  │  Transaction Safety + ChromaDB asyncio.Lock             │  │
+│  │  try { SQLite + ChromaDB } catch { rollback }           │  │
+│  └──────┬───────────────┬──────────────────────────────────┘  │
+│         │               │                                     │
+│  ┌──────┴─────┐  ┌──────┴──────┐  ┌──────────────────────┐   │
+│  │  SQLite    │  │  ChromaDB   │  │  Gemini 3.1 Flash    │   │
+│  │  (Truth)   │  │  (Search)   │  │  (Cognition)         │   │
+│  │  Versions, │  │  Embeddings,│  │  Neuro-analysis,     │   │
+│  │  Epochs,   │  │  1 coll/ws  │  │  Temporal summary,   │   │
+│  │  Chains,   │  │             │  │  Chat reasoning      │   │
+│  │  Neuro wts │  │             │  │                      │   │
+│  └────────────┘  └─────────────┘  └──────────────────────┘   │
+├───────────────────────────────────────────────────────────────┤
+│  Visual Mind UI: React + Vite + SSE (real-time updates)      │
+└───────────────────────────────────────────────────────────────┘
 ```
 
-Designed to run fully locally without cloud API dependencies on moderate hardware.
+**Edge-first design**: The i5 CPU handles orchestration, queue routing, and database management. All heavy semantic reasoning (deltas, emotional scoring, chat) is offloaded to Gemini API. SQLite + ChromaDB remain fully local — your data never leaves your machine. Only structured analysis prompts hit the cloud.
 
 ---
 
@@ -242,12 +265,14 @@ Memories dormant for 5+ days successfully triggered the decay mechanic, reducing
 pip install -r requirements.txt
 ```
 
-Requires [Ollama](https://ollama.ai/) running locally with `gemma2:2b`:
+### 2. Configure Gemini API (Required for v0.4)
+Create a `.env` file in the project root:
 ```bash
-ollama pull gemma2:2b
+GEMINI_API_KEY=your_gemini_api_key_here
 ```
+Get a free API key from [Google AI Studio](https://aistudio.google.com/apikey).
 
-### 2. The Terminal CLI
+### 3. The Terminal CLI
 ```bash
 cd tlcm-engine
 
@@ -260,35 +285,40 @@ python tlcm.py epoch create "Project Alpha" "Phase 1"
 # Store an immutable memory
 python tlcm.py remember --workspace "Project Alpha" "Initial metric X is 15%."
 
-# Jump back in time
+# Jump back in time (uses Gemini for analysis)
 python tlcm.py jump --workspace "Project Alpha" --from "Phase 1" --to "Current"
 
-# Enter the neuro-shell
+# Enter the neuro-shell (powered by Gemini)
 python tlcm.py chat --workspace "Project Alpha"
 ```
 
-### 3. The API Server
+### 4. The API Server (Slim Node)
 ```bash
 python -m uvicorn server.main:app --reload --port 8000
 ```
 Endpoints:
+- `POST /api/memories/remember` → **202 Accepted** (async, instant)
+- `POST /api/memories/remember/sync` → 200 OK (synchronous fallback)
+- `GET /api/events` → **SSE stream** (real-time processing notifications)
+- `GET /api/bus/status` → Queue health monitoring
 - `GET /api/workspaces`
-- `POST /api/memories/remember`
-- `GET /api/memories/{id}/history` (Fetches the evolutionary arc of a thought)
-- `POST /api/jump`
+- `GET /api/memories/{id}/history` — full belief evolution arc
+- `POST /api/jump` — temporal jump with Gemini analysis
+- `POST /api/jump/delta` — raw mathematical delta (no LLM)
 
-### 4. The Visual Dashboard
+### 5. The Visual Dashboard
 ```bash
 cd tlcm-web
+npm install
 npm run dev
 ```
 
-### 5. Run the Benchmark Suite
+### 6. Run the Benchmark Suite
 ```bash
-# Full benchmark (mocked Ollama, fast, no GPU needed)
+# Full benchmark (mocked, fast, no GPU/API needed)
 python -X utf8 -m pytest tests/test_benchmark.py -v -s
 
-# Smoke test (requires Ollama running)
+# Smoke test
 python -X utf8 test_tlcm.py
 
 # Hardware diagnostic
@@ -302,15 +332,23 @@ python -X utf8 diag.py
 ```
 tlcm-engine/
 ├── core/
-│   ├── database.py        # SQLite schema, migrations, WAL mode
-│   ├── memory_store.py     # Remember, update, recall, decay (transactional)
+│   ├── database.py        # SQLite schema + neuro-weighted migrations
+│   ├── memory_store.py     # remember(), commit_memory(), recall(), neuro-decay
 │   ├── embeddings.py       # ChromaDB engine, singleton client, metadata filtering
-│   ├── temporal_jump.py    # Mathematical Semantic Delta + LLM summary
+│   ├── temporal_jump.py    # Mathematical Semantic Delta + Gemini summary
+│   ├── gemini_judge.py     # [NEW v0.4] Structured neuro-analysis via Gemini API
+│   ├── async_bus.py        # [NEW v0.4] Tiered Memory Bus (STM queue → LTM worker)
 │   ├── epoch.py            # Epoch lifecycle management
 │   ├── workspace.py        # Workspace CRUD + isolation
-│   └── chat.py             # Interactive neuro-shell
-├── server/                 # FastAPI REST layer
+│   └── chat.py             # Interactive neuro-shell (Gemini-powered)
+├── server/
+│   ├── main.py             # FastAPI + SSE + async bus lifecycle
+│   ├── models.py           # Pydantic request schemas
+│   └── routers/            # REST endpoints (memories, workspaces, epochs, jump)
 ├── tlcm-web/               # React + Vite dashboard
+├── benchmarks/
+│   ├── external/           # MemPalace evaluation + TLCM adapter
+│   └── results/            # Benchmark output JSONs
 ├── tests/
 │   ├── conftest.py         # Test environment (temp DB, TLCM_TEST_MODE)
 │   └── test_benchmark.py   # 3 rigorous pytest benchmarks

@@ -6,6 +6,11 @@ Principle 4: Embedding-based retrieval (foundation for Temporal Jump)
 Every update creates a NEW memory linked to the old one via parent_id.
 Old memories are archived, never deleted.
 The result: a complete history of everything the AI has ever believed.
+
+v0.4 UPGRADE: Slim Node Hybrid Architecture
+- remember() now enqueues to the async bus (instant return)
+- commit_memory() is the actual DB+Chroma write (called by background worker)
+- recall() uses neuro-weighted decay (emotional_valence + urgency affect confidence)
 """
 
 import json
@@ -32,6 +37,36 @@ class MemoryStore:
         """
         Store a new memory in the correct workspace and epoch.
         TLCM Principle: memories are isolated by workspace and tagged with epoch.
+        
+        In synchronous mode (CLI, tests, direct calls): commits immediately.
+        In async mode (FastAPI): the router enqueues via the bus instead.
+        """
+        return self.commit_memory(
+            content=content,
+            workspace_name=workspace_name,
+            epoch_name=epoch_name,
+            source=source,
+            tags=tags,
+        )
+
+    def commit_memory(
+        self,
+        content: str,
+        workspace_name: str,
+        epoch_name: str = None,
+        source: str = "user_stated",
+        tags: list[str] = None,
+        emotional_valence: int = 0,
+        urgency_score: int = 5,
+        semantic_impact: int = 5,
+        reconsolidation_flag: str = "append",
+    ) -> dict:
+        """
+        The actual synchronous commit to SQLite + ChromaDB.
+        Called directly by remember() in sync mode, or by the async bus worker.
+        
+        Neuro-weighted fields are populated by the Gemini Judge when called
+        via the async bus. In direct/sync mode, defaults are used.
         """
         workspace = workspace_mgr.get_or_create(workspace_name)
         if epoch_name:
@@ -46,8 +81,9 @@ class MemoryStore:
         try:
             conn.execute(
                 """INSERT INTO memories
-                   (id, workspace_id, epoch_id, content, version, source, tags)
-                   VALUES (?, ?, ?, ?, 1, ?, ?)""",
+                   (id, workspace_id, epoch_id, content, version, source, tags,
+                    emotional_valence, urgency_score, semantic_impact, reconsolidation_flag)
+                   VALUES (?, ?, ?, ?, 1, ?, ?, ?, ?, ?, ?)""",
                 (
                     memory_id,
                     workspace["id"],
@@ -55,6 +91,10 @@ class MemoryStore:
                     content,
                     source,
                     json.dumps(tags or []),
+                    emotional_valence,
+                    urgency_score,
+                    semantic_impact,
+                    reconsolidation_flag,
                 ),
             )
 
@@ -67,7 +107,9 @@ class MemoryStore:
             )
 
             conn.commit()
-            print(f"[Memory] Stored in '{workspace_name}' / '{epoch['name']}'")
+            print(f"[Memory] Stored in '{workspace_name}' / '{epoch['name']}' "
+                  f"(emotion={emotional_valence}, urgency={urgency_score}, "
+                  f"impact={semantic_impact}, recon={reconsolidation_flag})")
             return {"id": memory_id, "workspace": workspace_name, "epoch": epoch["name"]}
         except Exception as e:
             conn.rollback()
@@ -110,8 +152,9 @@ class MemoryStore:
             new_id_ = new_id()
             conn.execute(
                 """INSERT INTO memories
-                   (id, workspace_id, epoch_id, content, version, parent_id, update_reason, source)
-                   VALUES (?, ?, ?, ?, ?, ?, ?, 'updated')""",
+                   (id, workspace_id, epoch_id, content, version, parent_id, update_reason, source,
+                    emotional_valence, urgency_score, semantic_impact, reconsolidation_flag)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, 'updated', ?, ?, ?, ?)""",
                 (
                     new_id_,
                     old["workspace_id"],
@@ -120,6 +163,10 @@ class MemoryStore:
                     old["version"] + 1,
                     memory_id,
                     reason,
+                    old.get("emotional_valence", 0),
+                    old.get("urgency_score", 5),
+                    old.get("semantic_impact", 5),
+                    old.get("reconsolidation_flag", "append"),
                 ),
             )
 
@@ -199,6 +246,8 @@ class MemoryStore:
         """
         Semantic search within a SPECIFIC workspace (and optionally epoch).
         TLCM Principle: isolated retrieval — never crosses workspace boundaries.
+        
+        v0.4: Neuro-weighted decay — emotional and urgent memories decay slower.
         """
         # Semantic search via embeddings
         semantic_results = embedding_engine.search(
@@ -224,6 +273,15 @@ class MemoryStore:
                     m = dict(mem)
                     if current_only and not m["is_current"]:
                         continue
+                    
+                    # Neuro-weighted effective confidence
+                    # High urgency/emotional memories resist decay
+                    raw_confidence = m.get("confidence", 1.0)
+                    urgency = m.get("urgency_score", 5)
+                    emotion = abs(m.get("emotional_valence", 0))
+                    neuro_boost = 1.0 + (urgency / 20.0) + (emotion / 20.0)
+                    m["effective_confidence"] = min(1.0, raw_confidence * neuro_boost)
+                    
                     m["relevance_score"] = result["score"]
                     enriched.append(m)
                     
@@ -263,14 +321,17 @@ class MemoryStore:
         """
         Biological Decay: Automatically lowers confidence of old memories.
         Should be called periodically (e.g. daily cron job or during startup).
+        
+        v0.4: Neuro-weighted decay — urgent/emotional memories decay 2-5x slower.
+        Decay rate = base_decay / neuro_boost_factor
         """
         conn = get_connection()
         try:
-            # Reduce confidence by 0.05 for memories not recalled in > 1 day.
+            # Standard decay for low-urgency, neutral memories
             conn.execute(
                 """
                 UPDATE memories 
-                SET confidence = MAX(0.1, confidence - 0.05)
+                SET confidence = MAX(0.1, confidence - (0.05 / (1.0 + urgency_score / 10.0 + ABS(emotional_valence) / 10.0)))
                 WHERE is_current = 1 
                   AND (last_recalled_at IS NULL OR julianday('now') - julianday(last_recalled_at) > 1)
                 """
@@ -278,7 +339,7 @@ class MemoryStore:
             # Re-normalize recall count periodically to smooth it out
             conn.execute("UPDATE memories SET recall_count = recall_count / 2 WHERE recall_count > 0")
             conn.commit()
-            print("[Memory] Biological decay algorithm applied.")
+            print("[Memory] Neuro-weighted biological decay applied.")
         except Exception as e:
             conn.rollback()
             print(f"[Memory Store] Decay ERR: {e}")

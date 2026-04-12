@@ -64,6 +64,11 @@ def init_db():
             tags TEXT,                                -- JSON array of tags
             recall_count INTEGER DEFAULT 0,           -- Biological decay: frequency
             last_recalled_at TEXT,                    -- Biological decay: recency
+            -- Neuro-weighted fields (populated by Gemini Judge)
+            emotional_valence INTEGER DEFAULT 0,      -- -10 (negative) to +10 (positive)
+            urgency_score INTEGER DEFAULT 5,          -- 0 (trivial) to 10 (critical)
+            semantic_impact INTEGER DEFAULT 5,        -- 0 (redundant) to 10 (paradigm shift)
+            reconsolidation_flag TEXT DEFAULT 'append', -- strengthen | weaken | append | contradicts_core
             created_at TEXT DEFAULT (datetime('now')),
             archived_at TEXT                          -- Set when superseded
         );
@@ -98,11 +103,19 @@ def init_db():
     """)
 
     # Safely try to add new columns to an existing DB (migration)
-    try:
-        cursor.execute("ALTER TABLE memories ADD COLUMN recall_count INTEGER DEFAULT 0")
-        cursor.execute("ALTER TABLE memories ADD COLUMN last_recalled_at TEXT")
-    except sqlite3.OperationalError:
-        pass  # Columns already exist
+    migrations = [
+        "ALTER TABLE memories ADD COLUMN recall_count INTEGER DEFAULT 0",
+        "ALTER TABLE memories ADD COLUMN last_recalled_at TEXT",
+        "ALTER TABLE memories ADD COLUMN emotional_valence INTEGER DEFAULT 0",
+        "ALTER TABLE memories ADD COLUMN urgency_score INTEGER DEFAULT 5",
+        "ALTER TABLE memories ADD COLUMN semantic_impact INTEGER DEFAULT 5",
+        "ALTER TABLE memories ADD COLUMN reconsolidation_flag TEXT DEFAULT 'append'",
+    ]
+    for migration in migrations:
+        try:
+            cursor.execute(migration)
+        except sqlite3.OperationalError:
+            pass  # Column already exists
 
     conn.commit()
     conn.close()

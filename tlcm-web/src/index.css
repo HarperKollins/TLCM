@@ -176,6 +176,23 @@ button.primary:hover {
   animation: fadeIn 0.4s ease-out forwards;
 }
 
+.hover-glow {
+  transition: all 0.3s ease;
+}
+.hover-glow:hover {
+  transform: translateX(4px);
+  border-left: 4px solid var(--accent-cyan);
+  background: rgba(100, 255, 218, 0.05);
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+.jump-spin {
+  animation: spin 2s linear infinite;
+}
+
 /* Memory Nodes (Visualizes the Epochs & Items) */
 .memory-node {
   position: relative;

@@ -17,3 +17,15 @@ def perform_jump(req: JumpReq):
         return {"result": result}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+@router.post("/delta")
+def get_jump_delta(req: JumpReq):
+    try:
+        delta = jumper.calculate_delta(
+            workspace_name=req.workspace,
+            from_epoch_name=req.from_epoch,
+            to_epoch_name=req.to_epoch
+        )
+        return delta
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))

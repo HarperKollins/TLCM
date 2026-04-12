@@ -1,9 +1,13 @@
 from fastapi import APIRouter, HTTPException
 from core.memory_store import MemoryStore
+from core.workspace import WorkspaceManager
+from core.epoch import EpochManager
 from server.models import MemoryStoreReq, MemoryUpdateReq, MemoryRecallReq
 
 router = APIRouter()
 memory = MemoryStore()
+ws_mgr = WorkspaceManager()
+epoch_mgr = EpochManager()
 
 @router.post("/remember")
 def store_memory(req: MemoryStoreReq):
@@ -47,3 +51,16 @@ def get_memory_history(memory_id: str):
     if not chain:
         raise HTTPException(status_code=404, detail="Memory not found")
     return chain
+
+@router.get("/workspace/{workspace_name}/epoch/{epoch_name}")
+def get_epoch_memories(workspace_name: str, epoch_name: str):
+    ws = ws_mgr.get(workspace_name)
+    if not ws:
+        raise HTTPException(status_code=404, detail="Workspace not found")
+    
+    ep = epoch_mgr.get_by_name(ws["id"], epoch_name)
+    if not ep:
+        raise HTTPException(status_code=404, detail="Epoch not found")
+        
+    mems = memory.recall_epoch_state(ws["id"], ep["id"])
+    return mems

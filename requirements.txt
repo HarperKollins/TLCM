@@ -8,3 +8,7 @@ rich>=13.0.0
 pytest>=8.0.0
 pytest-asyncio>=0.23.0
 matplotlib>=3.7.0
+google-genai>=1.70.0
+python-dotenv>=1.0.0
+google-genai>=1.70.0
+python-dotenv>=1.0.0

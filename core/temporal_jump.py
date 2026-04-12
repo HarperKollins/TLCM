@@ -49,35 +49,25 @@ class TemporalJumpEngine:
         Perform a temporal jump between two epochs within a workspace.
         Reconstructs the world-state at each epoch and maps the arc between them.
         """
+    def calculate_delta(self, workspace_name: str, from_epoch_name: str, to_epoch_name: str = None) -> dict:
         workspace = workspace_mgr.get(workspace_name)
         if not workspace:
-            return f"[Error] Workspace '{workspace_name}' not found."
+            raise ValueError(f"Workspace '{workspace_name}' not found.")
 
         from_epoch = epoch_mgr.get_by_name(workspace["id"], from_epoch_name)
         if not from_epoch:
-            return f"[Error] Epoch '{from_epoch_name}' not found in workspace '{workspace_name}'."
+            raise ValueError(f"Epoch '{from_epoch_name}' not found.")
 
-        # Get memories AT the from_epoch
         from_memories = memory_store.recall_epoch_state(workspace["id"], from_epoch["id"])
 
-        # Get memories at the to_epoch (default: current active epoch)
         if to_epoch_name:
             to_epoch = epoch_mgr.get_by_name(workspace["id"], to_epoch_name)
         else:
             to_epoch = epoch_mgr.get_active(workspace["id"])
-            to_epoch_name = to_epoch["name"] if to_epoch else "Current"
 
-        to_memories = (
-            memory_store.recall_epoch_state(workspace["id"], to_epoch["id"])
-            if to_epoch
-            else []
-        )
+        to_memories = memory_store.recall_epoch_state(workspace["id"], to_epoch["id"]) if to_epoch else []
 
-        # Calculate Mathematical Semantic Delta
-        continuities = []
-        additions = []
-        evolutions = []
-        
+        continuities, additions, evolutions = [], [], []
         from_ids = {m["id"]: m for m in from_memories}
         
         for tm in to_memories:
@@ -99,12 +89,41 @@ class TemporalJumpEngine:
                     })
                 else:
                     additions.append(tm)
+                    
+        return {
+            "continuities": continuities,
+            "additions": additions,
+            "evolutions": evolutions
+        }
+
+    def jump(
+        self,
+        workspace_name: str,
+        from_epoch_name: str,
+        to_epoch_name: str = None,
+        query: str = None,
+    ) -> str:
+        # Get the delta structures
+        try:
+            delta = self.calculate_delta(workspace_name, from_epoch_name, to_epoch_name)
+        except ValueError as e:
+            return f"[Error] {str(e)}"
+            
+        continuities = delta["continuities"]
+        additions = delta["additions"]
+        evolutions = delta["evolutions"]
+        
+        workspace = workspace_mgr.get(workspace_name)
+        from_epoch = epoch_mgr.get_by_name(workspace["id"], from_epoch_name)
+        to_epoch = epoch_mgr.get_by_name(workspace["id"], to_epoch_name) if to_epoch_name else epoch_mgr.get_active(workspace["id"])
+        
+        to_epoch_actual_name = to_epoch["name"] if to_epoch else "Current"
 
         # Build the structured temporal jump prompt
         prompt = self._build_prompt(
             workspace_name=workspace_name,
             from_epoch=from_epoch_name,
-            to_epoch=to_epoch_name,
+            to_epoch=to_epoch_actual_name,
             continuities=continuities,
             additions=additions,
             evolutions=evolutions,

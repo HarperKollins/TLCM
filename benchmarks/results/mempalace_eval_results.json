@@ -1,0 +1,166 @@
+{
+  "timestamp": "2026-04-12 11:25:40",
+  "model": "gemini-3.1-flash-lite-preview",
+  "total_scenarios": 10,
+  "average_score": 6.7,
+  "category_averages": {
+    "temporal_retrieval": 10.0,
+    "contradiction": 4.0,
+    "isolation": 10.0,
+    "evolution": 7.5,
+    "decay": 0.0
+  },
+  "results": [
+    {
+      "id": "temporal_01",
+      "category": "temporal_retrieval",
+      "score": 10,
+      "hallucination": false,
+      "facts_found": [
+        "$50,000",
+        "Q1"
+      ],
+      "facts_missing": [],
+      "reasoning": "The system correctly identified the budget amount and the specific temporal period requested. All required facts were present, and there was no evidence of hallucinations or context bleed.",
+      "answer": "The project budget for Q1 was $50,000 [S1].",
+      "context_retrieved": "[S2] (confidence=1.00): The project budget has been increased to $75,000 for Q2 due to expanded scope.\n[S1] (confidence=1.00): The project budget is $50,000 for Q1."
+    },
+    {
+      "id": "temporal_02",
+      "category": "temporal_retrieval",
+      "score": 10,
+      "hallucination": false,
+      "facts_found": [
+        "Python 3.10",
+        "original",
+        "before migration"
+      ],
+      "facts_missing": [],
+      "reasoning": "The system accurately identified the original Python version (3.10) and placed it in the correct temporal context (before migration). All required facts were present, and no hallucinations or context bleed were detected.",
+      "answer": "The backend originally used Python 3.10 [S1].",
+      "context_retrieved": "[S2] (confidence=1.00): We migrated the backend to Python 3.12 for performance gains.\n[S2] (confidence=1.00): The project budget has been increased to $75,000 for Q2 due to expanded scope.\n[S1] (confidence=1.00): The project budget is $50,000 for Q1.\n[S1] (confidence=1.00): The team uses Python 3.10 for the backend."
+    },
+    {
+      "id": "contradiction_01",
+      "category": "contradiction",
+      "score": 10,
+      "hallucination": false,
+      "facts_found": [
+        "Previous: Alpha-1-Zephyr",
+        "Current: Bravo-9-Echo"
+      ],
+      "facts_missing": [],
+      "reasoning": "The system correctly identified the previous code as Alpha-1-Zephyr and the current code as Bravo-9-Echo. It handled the temporal states accurately, included all required facts, and showed no signs of hallucination or context bleed.",
+      "answer": "The current secret code is Bravo-9-Echo [S2]. The previous code was Alpha-1-Zephyr [S1].",
+      "context_retrieved": "[S2] (confidence=1.00): We migrated the backend to Python 3.12 for performance gains.\n[S2] (confidence=1.00): Due to a security breach, the code Alpha-1-Zephyr has been revoked. Set the new code to Bravo-9-Echo.\n[S1] (confidence=1.00): The secret code is Alpha-1-Zephyr. Keep it safe.\n[S2] (confidence=1.00): The project budget has been increased to $75,000 for Q2 due to expanded scope.\n[S1] (confidence=1.00): The project budget is $50,000 for Q1."
+    },
+    {
+      "id": "contradiction_02",
+      "category": "contradiction",
+      "score": 0,
+      "hallucination": true,
+      "facts_found": [],
+      "facts_missing": [
+        "Alice is dating Charlie",
+        "She broke up with Bob"
+      ],
+      "reasoning": "The system failed to retrieve the updated status of Alice's relationship. It incorrectly identified a past partner as her current partner, showing a failure in temporal reasoning and outdated information retrieval.",
+      "answer": "Alice is dating Bob.",
+      "context_retrieved": "[S1] (confidence=1.00): The secret code is Alpha-1-Zephyr. Keep it safe.\n[S2] (confidence=1.00): Due to a security breach, the code Alpha-1-Zephyr has been revoked. Set the new code to Bravo-9-Echo.\n[S2] (confidence=1.00): The project budget has been increased to $75,000 for Q2 due to expanded scope.\n[S1] (confidence=1.00): The project budget is $50,000 for Q1.\n[S1] (confidence=1.00): Alice is dating Bob. They are very happy together."
+    },
+    {
+      "id": "contradiction_03",
+      "category": "contradiction",
+      "score": 2,
+      "hallucination": true,
+      "facts_found": [],
+      "facts_missing": [
+        "Current yield: 38%",
+        "Was 42%",
+        "Peaked at 67%",
+        "Catalyst B degraded"
+      ],
+      "reasoning": "The system provided the incorrect current yield (42% vs the expected 38%), failed to report the historical context of the yield, and explicitly claimed no information existed regarding changes despite clear expected facts to the contrary.",
+      "answer": "The current experiment yield is 42%. There is no information provided regarding a change in the experiment yield.",
+      "context_retrieved": "[S1] (confidence=1.00): The secret code is Alpha-1-Zephyr. Keep it safe.\n[S2] (confidence=1.00): Due to a security breach, the code Alpha-1-Zephyr has been revoked. Set the new code to Bravo-9-Echo.\n[S2] (confidence=1.00): The project budget has been increased to $75,000 for Q2 due to expanded scope.\n[S1] (confidence=1.00): The project budget is $50,000 for Q1.\n[S1] (confidence=1.00): The experiment yield is 42%. This is below our 50% threshold."
+    },
+    {
+      "id": "isolation_01",
+      "category": "isolation",
+      "score": 10,
+      "hallucination": false,
+      "bleed_detected": false,
+      "facts_found": [
+        "pizza",
+        "dinner"
+      ],
+      "facts_missing": [],
+      "reasoning": "The system correctly identified the meal (pizza) and the event (dinner) while maintaining the correct temporal reference (last night). No hallucinations or context bleed detected.",
+      "answer": "You had pizza for dinner last night [S1].",
+      "context_retrieved": "[S1]: I had pizza for dinner last night. It was delicious."
+    },
+    {
+      "id": "isolation_02",
+      "category": "isolation",
+      "score": 10,
+      "hallucination": false,
+      "bleed_detected": false,
+      "facts_found": [
+        "500g flour",
+        "350ml water",
+        "12 hours"
+      ],
+      "facts_missing": [],
+      "reasoning": "The system correctly identified all three expected facts and provided them in the context of a recipe. The temporal aspect is appropriately handled by describing the preparation process.",
+      "answer": "The sourdough ingredients are 500g of flour and 350ml of water [S1]. The mixture should be fermented for 12 hours [S1].",
+      "context_retrieved": "[S1]: For the sourdough, use 500g flour and 350ml water. Ferment for 12 hours."
+    },
+    {
+      "id": "evolution_01",
+      "category": "evolution",
+      "score": 5,
+      "hallucination": false,
+      "facts_found": [
+        "Initially hypothesized 10%",
+        "Lab showed 18%"
+      ],
+      "facts_missing": [
+        "Peer review confirmed 15%",
+        "measurement error"
+      ],
+      "reasoning": "The system correctly identified the initial hypothesis and the laboratory findings but failed to include the peer review confirmation and the subsequent identification of a measurement error, which are critical to the evolution of the understanding of Compound X.",
+      "answer": "Our understanding evolved from the initial hypothesis that Compound X would increase tensile strength by 10% [Phase1] to lab results demonstrating an 18% increase, which exceeded expectations [Phase2].",
+      "context_retrieved": "[S1] (confidence=1.00): The secret code is Alpha-1-Zephyr. Keep it safe.\n[Phase1] (confidence=1.00): Our hypothesis: Compound X increases tensile strength by 10%.\n[Phase2] (confidence=1.00): Lab results show Compound X increases tensile strength by 18%, exceeding expectations.\n[S2] (confidence=1.00): The project budget has been increased to $75,000 for Q2 due to expanded scope.\n[S2] (confidence=1.00): Due to a security breach, the code Alpha-1-Zephyr has been revoked. Set the new code to Bravo-9-Echo."
+    },
+    {
+      "id": "evolution_02",
+      "category": "evolution",
+      "score": 10,
+      "hallucination": false,
+      "facts_found": [
+        "1,200 users initially",
+        "TechCrunch spike to 3,500",
+        "Normalized to 4,100",
+        "Retention 62%"
+      ],
+      "facts_missing": [],
+      "reasoning": "The system accurately traced the evolution of user growth metrics across the requested timeframe. All expected facts were explicitly stated and integrated into the timeline correctly. There is no evidence of hallucination or context bleed.",
+      "answer": "The user growth metrics evolved as follows:\n\n*   **Week 1:** User count was 1,200 with a 5% week-over-week growth rate.\n*   **Week 2:** Following a TechCrunch feature, the user count jumped to 3,500, with the growth rate spiking to 190%.\n*   **Week 3:** Growth normalized to 17% week-over-week, with the user count reaching 4,100 and a retention rate of 62%.",
+      "context_retrieved": "[Week2] (confidence=1.00): User count jumped to 3,500 after the TechCrunch feature. Growth rate spiked to 190%.\n[S1] (confidence=1.00): The secret code is Alpha-1-Zephyr. Keep it safe.\n[Phase2] (confidence=1.00): Lab results show Compound X increases tensile strength by 18%, exceeding expectations.\n[Week3] (confidence=1.00): Growth normalized. User count is 4,100 with 17% WoW growth. Retention rate is 62%.\n[Week1] (confidence=1.00): User count is 1,200. Growth rate is 5% week-over-week."
+    },
+    {
+      "id": "decay_01",
+      "category": "decay",
+      "score": 0,
+      "hallucination": false,
+      "facts_found": [],
+      "facts_missing": [
+        "0.001",
+        "gradient descent"
+      ],
+      "reasoning": "The system failed to retrieve the required information despite it being listed as an expected fact. It stated that the information was not present, which is a retrieval failure.",
+      "answer": "The provided information does not contain the learning rate of the core algorithm.",
+      "context_retrieved": "[S1] (confidence=1.00): The project budget is $50,000 for Q1.\n[S2] (confidence=1.00): The project budget has been increased to $75,000 for Q2 due to expanded scope.\n[S1] (confidence=1.00): The experiment yield is 42%. This is below our 50% threshold.\n[S1] (confidence=1.00): Alice is dating Bob. They are very happy together.\n[S1] (confidence=1.00): The team uses Python 3.10 for the backend."
+    }
+  ]
+}

@@ -97,7 +97,27 @@ class MemoryStore:
                     reconsolidation_flag,
                 ),
             )
-
+            conn.commit()
+            
+            # Targeted Corrective Surgery (Feature 6)
+            if reconsolidation_flag == "contradicts_core":
+                conflicting = self.recall(
+                    query=content,
+                    workspace_name=workspace_name,
+                    epoch_name=epoch["name"],
+                    limit=1
+                )
+                if conflicting and conflicting[0].get("relevance_score", 0) > 0.5:
+                    target_id = conflicting[0]["id"]
+                    try:
+                        conn.execute(
+                            "UPDATE memories SET confidence = MAX(0.1, confidence - 0.4) WHERE id = ?",
+                            (target_id,)
+                        )
+                        conn.commit()
+                        print(f"[Surgery] Surgically weakened confidence of past memory {target_id[:8]}")
+                    except Exception as seq_e:
+                        print(f"[Surgery] error during reconsolidation surgery: {seq_e}")
             # Store embedding for semantic search
             embedding_engine.embed_and_store(
                 memory_id=memory_id,

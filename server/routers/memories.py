@@ -51,6 +51,19 @@ async def store_memory(req: MemoryStoreReq):
         raise HTTPException(status_code=400, detail=str(e))
 
 
+@router.get("/status/{temp_id}")
+def get_memory_status(temp_id: str):
+    """
+    Poll checking the processing status of a memory.
+    Useful for clients that cannot connect to the SSE event stream.
+    """
+    bus = MemoryBus.get_instance()
+    status_data = bus.get_status(temp_id)
+    if not status_data:
+        raise HTTPException(status_code=404, detail="Memory temp_id not found or expired.")
+    return status_data
+
+
 @router.post("/remember/sync")
 def store_memory_sync(req: MemoryStoreReq):
     """

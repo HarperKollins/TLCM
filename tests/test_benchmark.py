@@ -138,3 +138,46 @@ def test_biological_decay():
     assert aged_m["confidence"] >= 0.1, f"Decay over-aggressive: confidence dropped to {aged_m['confidence']}"
 
     print("[Benchmark] BIOLOGICAL DECAY: PASSED - Confidence correctly reduced.")
+
+def test_corrective_surgery():
+    """
+    Verifies that inserting a memory with reconsolidation_flag 'contradicts_core'
+    surgically weakens the confidence of the conflicting past memory.
+    """
+    ws_mgr = WorkspaceManager()
+    mem = MemoryStore()
+
+    ws_mgr.get_or_create("Surgery Test", "...")
+    
+    m1 = mem.commit_memory(
+        content="The Earth is flat.",
+        workspace_name="Surgery Test",
+        emotional_valence=8,
+        urgency_score=5,
+        semantic_impact=10,
+        reconsolidation_flag="append"
+    )
+
+    conn = get_connection()
+    c1_initial = conn.execute("SELECT confidence FROM memories WHERE id = ?", (m1["id"],)).fetchone()["confidence"]
+    conn.close()
+    
+    assert c1_initial == 1.0, "Initial confidence should be 1.0"
+
+    # Insert a contradicting memory. We use the same text so that fake embeddings hit it via distance 0 (relevance 1.0)
+    m2 = mem.commit_memory(
+        content="The Earth is flat.",
+        workspace_name="Surgery Test",
+        emotional_valence=9,
+        urgency_score=10,
+        semantic_impact=10,
+        reconsolidation_flag="contradicts_core"
+    )
+    
+    conn = get_connection()
+    c1_final = conn.execute("SELECT confidence FROM memories WHERE id = ?", (m1["id"],)).fetchone()["confidence"]
+    conn.close()
+
+    assert c1_final < c1_initial, f"Surgical weakening failed. Expected drop, got {c1_final}"
+    assert c1_final == max(0.1, c1_initial - 0.4), "Confidence weakened by wrong amount"
+    print("[Benchmark] CORRECTIVE SURGERY: PASSED - Conflicting memory surgically weakened.")

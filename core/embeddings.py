@@ -12,7 +12,8 @@ import ollama
 import os
 
 CHROMA_PATH = Path(__file__).parent.parent / "data" / "chroma"
-EMBEDDING_DIM = 768
+EMBEDDING_DIM = 384  # Updated for all-minilm
+EMBEDDING_MODEL = "all-minilm"
 
 
 # Singleton client cache (avoid recreating on every call)
@@ -36,8 +37,6 @@ def _collection_name(workspace_name: str) -> str:
     """
     Each workspace gets its own ChromaDB collection.
     This is the technical implementation of workspace isolation.
-    Epoch filtering is done via metadata (where="epoch") to prevent
-    creating 100s of tiny SQLite files and crashing Chroma.
     """
     base = workspace_name.lower().replace(" ", "_").replace("-", "_")[:30]
     return f"ws_{base}"
@@ -45,16 +44,63 @@ def _collection_name(workspace_name: str) -> str:
 
 def _embed(text: str) -> list[float]:
     """
-    Get embedding from Ollama using gemma2:2b.
+    Get embedding from Ollama using all-minilm (super fast CPU local).
     In test mode (TLCM_TEST_MODE=1), returns a deterministic dummy vector.
     """
     if os.environ.get("TLCM_TEST_MODE") == "1":
-        # Deterministic mock: hash the text to get slightly varied vectors
         h = hash(text) % 1000 / 1000.0
         return [h + 0.001 * i for i in range(EMBEDDING_DIM)]
-    response = ollama.embeddings(model="gemma2:2b", prompt=text)
+    response = ollama.embeddings(model=EMBEDDING_MODEL, prompt=text)
     return response["embedding"]
 
+
+def _trigger_migration(client, collection_name: str, workspace_name: str):
+    """
+    Seamless Re-indexing Engine: Drops legacy collection and rebuilds 
+    it cleanly from the SQLite absolute truth using the new dimension.
+    """
+    print(f"[Embedding] Dimension mismatch detected for '{workspace_name}'. Migrating legacy vectors to {EMBEDDING_MODEL}...")
+    try:
+        client.delete_collection(name=collection_name)
+    except Exception:
+        pass  # Just in case
+
+    collection = client.create_collection(
+        name=collection_name,
+        metadata={"workspace": workspace_name, "model": EMBEDDING_MODEL},
+    )
+    
+    # Re-embed from absolute truth
+    from core.database import get_connection
+    conn = get_connection()
+    try:
+        memories = conn.execute(
+            "SELECT m.id, m.content, e.name as epoch_name "
+            "FROM memories m "
+            "JOIN epochs e ON m.epoch_id = e.id "
+            "JOIN workspaces w ON m.workspace_id = w.id "
+            "WHERE w.name = ? AND m.is_current = 1", 
+            (workspace_name,)
+        ).fetchall()
+        
+        if memories:
+            ids, embeddings, documents, metadatas = [], [], [], []
+            for mem in memories:
+                ids.append(mem["id"])
+                documents.append(mem["content"])
+                metadatas.append({"workspace": workspace_name, "epoch": mem["epoch_name"]})
+                embeddings.append(_embed(mem["content"]))
+            
+            collection.upsert(
+                ids=ids,
+                embeddings=embeddings,
+                documents=documents,
+                metadatas=metadatas
+            )
+            print(f"[Embedding] Successfully re-indexed {len(memories)} memories for '{workspace_name}'.")
+    finally:
+        conn.close()
+    return collection
 
 class EmbeddingEngine:
     def embed_and_store(
@@ -68,12 +114,14 @@ class EmbeddingEngine:
         client = _get_chroma_client()
         collection_name = _collection_name(workspace_name)
 
+        collection = client.get_or_create_collection(
+            name=collection_name,
+            metadata={"workspace": workspace_name},
+        )
+        
+        embedding = _embed(content)
+        
         try:
-            collection = client.get_or_create_collection(
-                name=collection_name,
-                metadata={"workspace": workspace_name},
-            )
-            embedding = _embed(content)
             collection.upsert(
                 ids=[memory_id],
                 embeddings=[embedding],
@@ -81,8 +129,19 @@ class EmbeddingEngine:
                 metadatas=[{"workspace": workspace_name, "epoch": epoch_name or ""}],
             )
         except Exception as e:
-            print(f"[Embedding] ERR: Could not store embedding: {e}")
-            raise e
+            if "dimension" in str(e).lower() or "expected" in str(e).lower():
+                # Trigger Auto-Migration
+                collection = _trigger_migration(client, collection_name, workspace_name)
+                # Retry upsert once migration is finished
+                collection.upsert(
+                    ids=[memory_id],
+                    embeddings=[embedding],
+                    documents=[content],
+                    metadatas=[{"workspace": workspace_name, "epoch": epoch_name or ""}],
+                )
+            else:
+                print(f"[Embedding] ERR: Could not store embedding: {e}")
+                raise e
 
     def search(
         self,
@@ -115,6 +174,17 @@ class EmbeddingEngine:
                 
             results = collection.query(**query_kwargs)
 
+        except Exception as e:
+            if "dimension" in str(e).lower() or "expected" in str(e).lower():
+                collection = _trigger_migration(client, collection_name, workspace_name)
+                # Retry query
+                query_kwargs["n_results"] = min(limit, collection.count() or 1)
+                results = collection.query(**query_kwargs)
+            else:
+                print(f"[Embedding] Search error: {e}")
+                return []
+
+        try:
             output = []
             if results["ids"] and results["ids"][0]:
                 for i, memory_id in enumerate(results["ids"][0]):
@@ -125,7 +195,7 @@ class EmbeddingEngine:
                     })
             return output
         except Exception as e:
-            print(f"[Embedding] Search error: {e}")
+            print(f"[Embedding] Search formatting error: {e}")
             return []
 
     def delete(self, memory_id: str, workspace_name: str, epoch_name: str = ""):

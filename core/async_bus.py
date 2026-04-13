@@ -57,6 +57,7 @@ class MemoryBus:
         self._worker_task: Optional[asyncio.Task] = None
         self._sse_callback: Optional[Callable[[dict], Awaitable[None]]] = None
         self._running = False
+        self._status_map = {}
 
     @classmethod
     def get_instance(cls) -> "MemoryBus":
@@ -74,6 +75,10 @@ class MemoryBus:
     def set_sse_callback(self, callback: Callable[[dict], Awaitable[None]]):
         """Register a callback that fires when a memory finishes processing."""
         self._sse_callback = callback
+
+    def get_status(self, temp_id: str) -> Optional[dict]:
+        """Fetch the current processing status of a memory."""
+        return self._status_map.get(temp_id)
 
     async def enqueue(
         self,
@@ -97,6 +102,7 @@ class MemoryBus:
             tags=tags,
         )
         await self._queue.put(payload)
+        self._status_map[temp_id] = {"status": "processing"}
         logger.info(f"[Bus] Enqueued {temp_id} for '{workspace_name}' (queue size: {self._queue.qsize()})")
         return temp_id
 
@@ -135,22 +141,45 @@ class MemoryBus:
 
                 logger.info(f"[Bus] Processing {payload.temp_id}...")
 
-                # Step 1: Run Gemini analysis (offloaded to API, non-blocking for i5)
+                # Step 0: Local Fallback Heuristic
+                local_bypassed = False
                 try:
-                    analysis = await asyncio.to_thread(
-                        analyze_memory,
-                        content=payload.content,
+                    similar = store.recall(
+                        query=payload.content,
                         workspace_name=payload.workspace_name,
+                        epoch_name=payload.epoch_name,
+                        limit=1
                     )
+                    if similar and similar[0].get("relevance_score", 0) > 0.95:
+                        logger.info(f"[Bus] Local fallback activated. {payload.temp_id} matched memory {similar[0]['id'][:8]}")
+                        analysis = {
+                            "semantic_delta": "Redundant/continuation of existing memory.",
+                            "emotional_valence": similar[0].get("emotional_valence", 0),
+                            "urgency_score": similar[0].get("urgency_score", 5),
+                            "semantic_impact": 1,
+                            "reconsolidation_suggestion": "strengthen",
+                        }
+                        local_bypassed = True
                 except Exception as e:
-                    logger.error(f"[Bus] Gemini analysis failed for {payload.temp_id}: {e}")
-                    analysis = {
-                        "semantic_delta": "",
-                        "emotional_valence": 0,
-                        "urgency_score": 5,
-                        "semantic_impact": 5,
-                        "reconsolidation_suggestion": "append",
-                    }
+                    logger.error(f"[Bus] Local fallback check failed: {e}")
+
+                if not local_bypassed:
+                    # Step 1: Run Gemini analysis (offloaded to API, non-blocking for i5)
+                    try:
+                        analysis = await asyncio.to_thread(
+                            analyze_memory,
+                            content=payload.content,
+                            workspace_name=payload.workspace_name,
+                        )
+                    except Exception as e:
+                        logger.error(f"[Bus] Gemini analysis failed for {payload.temp_id}: {e}")
+                        analysis = {
+                            "semantic_delta": "",
+                            "emotional_valence": 0,
+                            "urgency_score": 5,
+                            "semantic_impact": 5,
+                            "reconsolidation_suggestion": "append",
+                        }
 
                 # Step 2: Commit to SQLite + ChromaDB (under lock for Chroma safety)
                 try:
@@ -169,7 +198,10 @@ class MemoryBus:
                         )
                 except Exception as e:
                     logger.error(f"[Bus] Commit failed for {payload.temp_id}: {e}")
-                    # Fire error SSE
+                    self._status_map[payload.temp_id] = {
+                        "status": "error",
+                        "error": str(e)
+                    }
                     if self._sse_callback:
                         await self._sse_callback({
                             "type": "memory_error",
@@ -193,11 +225,13 @@ class MemoryBus:
                     "status": "complete",
                 }
 
+                self._status_map[payload.temp_id] = event_data
+
                 if self._sse_callback:
                     await self._sse_callback(event_data)
 
                 logger.info(
-                    f"[Bus] Committed {payload.temp_id} → {result['id'][:12]}... "
+                    f"[Bus] Committed {payload.temp_id} → {result.get('id', 'updated')[:12]}... "
                     f"(emotion={analysis.get('emotional_valence')}, "
                     f"urgency={analysis.get('urgency_score')}, "
                     f"recon={analysis.get('reconsolidation_suggestion')})"

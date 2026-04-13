@@ -265,14 +265,20 @@ Memories dormant for 5+ days successfully triggered the decay mechanic, reducing
 pip install -r requirements.txt
 ```
 
-### 2. Configure Gemini API (Required for v0.4)
+### 2. Pull Local Embedding Model (Required for Search)
+TLCM uses `all-minilm` locally for zero-latency semantic indexing without sending core data to the cloud:
+```bash
+ollama pull all-minilm
+```
+
+### 3. Configure Gemini API (Required for v0.4)
 Create a `.env` file in the project root:
 ```bash
 GEMINI_API_KEY=your_gemini_api_key_here
 ```
 Get a free API key from [Google AI Studio](https://aistudio.google.com/apikey).
 
-### 3. The Terminal CLI
+### 4. The Terminal CLI
 ```bash
 cd tlcm-engine
 
@@ -292,7 +298,7 @@ python tlcm.py jump --workspace "Project Alpha" --from "Phase 1" --to "Current"
 python tlcm.py chat --workspace "Project Alpha"
 ```
 
-### 4. The API Server (Slim Node)
+### 5. The API Server (Slim Node)
 ```bash
 python -m uvicorn server.main:app --reload --port 8000
 ```
@@ -306,14 +312,14 @@ Endpoints:
 - `POST /api/jump` — temporal jump with Gemini analysis
 - `POST /api/jump/delta` — raw mathematical delta (no LLM)
 
-### 5. The Visual Dashboard
+### 6. The Visual Dashboard
 ```bash
 cd tlcm-web
 npm install
 npm run dev
 ```
 
-### 6. Run the Benchmark Suite
+### 7. Run the Benchmark Suite
 ```bash
 # Full benchmark (mocked, fast, no GPU/API needed)
 python -X utf8 -m pytest tests/test_benchmark.py -v -s

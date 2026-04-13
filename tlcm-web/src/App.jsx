@@ -1,5 +1,6 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { BrainCircuit, Database, History, Zap, Activity } from 'lucide-react'
+import NetworkGraph from './components/NetworkGraph'
 
 const API_URL = "http://127.0.0.1:8000/api"
 
@@ -30,30 +31,35 @@ const MemoryTree = ({ history }) => {
   )
 }
 
-const EpochMemories = ({ workspace, epoch }) => {
+const EpochMemories = ({ workspace, epoch, lastEventTime }) => {
   const [memories, setMemories] = useState([])
-  const [activeMemoryHistory, setActiveMemoryHistory] = useState(null)
+  const [historyMap, setHistoryMap] = useState({})
 
-  useEffect(() => {
+  const fetchMemories = useCallback(() => {
     fetch(`${API_URL}/memories/workspace/${workspace.name}/epoch/${epoch.name}`)
       .then(res => res.json())
-      .then(data => setMemories(data))
+      .then(data => {
+        setMemories(data)
+        // Automatically pre-load history for graph rendering
+        data.forEach(mem => {
+          if (!historyMap[mem.id]) {
+            fetch(`${API_URL}/memories/${mem.id}/history`)
+              .then(r => r.json())
+              .then(histData => {
+                 setHistoryMap(prev => ({...prev, [mem.id]: histData}))
+              }).catch(e => console.error(e))
+          }
+        })
+      })
       .catch(e => console.error(e))
   }, [workspace, epoch])
 
-  const loadHistory = async (mem) => {
-    if (activeMemoryHistory && activeMemoryHistory[activeMemoryHistory.length-1].id === mem.id) {
-      setActiveMemoryHistory(null)
-      return
-    }
-    try {
-      const res = await fetch(`${API_URL}/memories/${mem.id}/history`)
-      const data = await res.json()
-      setActiveMemoryHistory(data)
-    } catch(e) {
-      console.error(e)
-    }
-  }
+  // Refetch when workspace/epoch or the global SSE clock changes
+  useEffect(() => {
+    fetchMemories()
+  }, [fetchMemories, lastEventTime])
+
+
 
   if (memories.length === 0) {
     return <div style={{ padding: '16px', color: 'var(--text-muted)' }}>No memories in this epoch yet.</div>
@@ -61,8 +67,13 @@ const EpochMemories = ({ workspace, epoch }) => {
 
   return (
     <div style={{ marginTop: '16px' }}>
+      
+      {/* 2D Interactive Memory Graph */}
+      <NetworkGraph memories={memories} historyMap={historyMap} />
+      
+      <div style={{ marginTop: '24px' }}>
       {memories.map(m => (
-        <div key={m.id} className="glass-panel hover-glow" style={{ marginBottom: '16px', padding: '20px', cursor: 'pointer' }} onClick={() => loadHistory(m)}>
+        <div key={m.id} className="glass-panel hover-glow" style={{ marginBottom: '16px', padding: '20px' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
             <span style={{ color: 'var(--text-muted)', fontSize: '0.8rem' }}>Node #{m.id.substring(0,8)}</span>
             <div style={{ display: 'flex', gap: '12px' }}>
@@ -70,13 +81,14 @@ const EpochMemories = ({ workspace, epoch }) => {
               <span style={{ color: 'var(--accent-purple)', fontSize: '0.8rem', fontWeight: 'bold' }}>v{m.version}</span>
             </div>
           </div>
-          <p style={{ fontSize: '1rem', lineHeight: '1.5' }}>{m.content}</p>
+          <p style={{ fontSize: '1rem', lineHeight: '1.5', textDecoration: m.reconsolidation_flag === 'orphaned_via_surgery' ? 'line-through' : 'none', color: m.reconsolidation_flag === 'orphaned_via_surgery' ? '#da6b6b' : 'inherit' }}>{m.content}</p>
           
-          {activeMemoryHistory && activeMemoryHistory[activeMemoryHistory.length-1].id === m.id && (
-             <MemoryTree history={activeMemoryHistory} />
+          {historyMap[m.id] && (
+             <MemoryTree history={historyMap[m.id]} />
           )}
         </div>
       ))}
+      </div>
     </div>
   )
 }
@@ -93,13 +105,30 @@ function App() {
   const [jumpDelta, setJumpDelta] = useState(null)
   const [isJumping, setIsJumping] = useState(false)
 
+  // SSE Live Reload Clock
+  const [lastEventTime, setLastEventTime] = useState(Date.now())
+
+  // Connect to SSE
+  useEffect(() => {
+    const source = new EventSource(`${API_URL}/events`);
+    source.onmessage = (e) => {
+      try {
+        const payload = JSON.parse(e.data);
+        console.log("Memory Event received:", payload);
+        // Trigger a global re-render to update the memory graphs
+        setLastEventTime(Date.now());
+      } catch (err) {}
+    };
+    return () => source.close();
+  }, [])
+
   // Fetch workspaces on load
   useEffect(() => {
     fetch(`${API_URL}/workspaces/`)
       .then(res => res.json())
       .then(data => setWorkspaces(data))
       .catch(err => console.error("API not available:", err))
-  }, [])
+  }, [lastEventTime])
 
   // Fetch epochs when workspace changes
   useEffect(() => {
@@ -108,7 +137,7 @@ function App() {
         .then(res => res.json())
         .then(data => setEpochs(data))
     }
-  }, [activeWorkspace])
+  }, [activeWorkspace, lastEventTime])
 
   const handleJump = async () => {
     setIsJumping(true)
@@ -225,7 +254,7 @@ function App() {
                   </h3>
                   <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem', marginBottom: 16 }}>{epoch.description}</p>
                   
-                  <EpochMemories workspace={activeWorkspace} epoch={epoch} />
+                  <EpochMemories workspace={activeWorkspace} epoch={epoch} lastEventTime={lastEventTime} />
                 </div>
               ))}
             </div>

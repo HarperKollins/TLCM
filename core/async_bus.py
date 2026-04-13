@@ -319,6 +319,37 @@ class MemoryBus:
                     f"recon={analysis.get('reconsolidation_suggestion')})"
                 )
 
+                # Step 4: Proactive Recall Daemon
+                try:
+                    stored_id = result["id"] if isinstance(result, dict) else str(result)
+                    
+                    proactive_matches = await asyncio.to_thread(
+                        store.recall,
+                        query=payload.content,
+                        workspace_name=payload.workspace_name,
+                        limit=3
+                    )
+                    
+                    # Filter for highly charged past items
+                    warnings = [
+                        m for m in proactive_matches 
+                        if m.get("id") != stored_id 
+                        and (abs(m.get("emotional_valence", 0)) > 5 or m.get("urgency_score", 0) > 7)
+                        and m.get("relevance_score", 0) > 0.82
+                    ]
+                    
+                    if warnings and self._sse_callback:
+                        await self._sse_callback({
+                            "type": "proactive_context",
+                            "workspace": payload.workspace_name,
+                            "trigger_memory_id": stored_id,
+                            "trigger_content": payload.content,
+                            "surfaced_past": warnings
+                        })
+                        logger.info(f"[Bus] Proactive Recall triggered by {stored_id}. Surfaced {len(warnings)} charged historical vectors.")
+                except Exception as eval_e:
+                    logger.error(f"[Bus] Proactive Recall daemon evaluation failed: {eval_e}")
+
                 self._queue.task_done()
 
             except asyncio.CancelledError:

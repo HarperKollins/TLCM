@@ -415,3 +415,78 @@ class MemoryStore:
             print(f"[Memory Store] Decay ERR: {e}")
         finally:
             conn.close()
+
+    def boost_related_memories(
+        self,
+        trigger_content: str,
+        workspace_name: str,
+        boost_amount: float = 0.1,
+        relevance_threshold: float = 0.7,
+        limit: int = 5,
+    ) -> list[dict]:
+        """
+        Surprise-Driven Reconsolidation (v0.5 Killer Feature)
+        
+        When a new high-urgency/high-emotion memory triggers this method,
+        it finds semantically similar OLDER memories and BOOSTS their confidence.
+        
+        Neuroscience basis: Emotionally salient new events strengthen associated
+        older memories through reconsolidation (Nader et al., 2000). A surprise
+        input doesn't just store itself — it retroactively reinforces the
+        memories it connects to, making them harder to forget.
+        
+        This is the inverse of decay: decay weakens unused memories, while
+        surprise-driven reconsolidation strengthens memories that become
+        relevant again due to a high-impact event.
+        
+        Formula:
+            new_confidence = MIN(1.0, confidence + boost_amount)
+            recall_count += 1
+            last_recalled_at = NOW()
+        """
+        # Find semantically similar memories in the same workspace
+        related = self.recall(
+            query=trigger_content,
+            workspace_name=workspace_name,
+            limit=limit,
+            current_only=True,
+        )
+
+        if not related:
+            return []
+
+        boosted = []
+        conn = get_connection()
+        try:
+            now_iso = datetime.now().isoformat()
+            for mem in related:
+                relevance = mem.get("relevance_score", 0)
+                if relevance < relevance_threshold:
+                    continue
+
+                conn.execute(
+                    """UPDATE memories 
+                       SET confidence = MIN(1.0, confidence + ?),
+                           recall_count = recall_count + 1,
+                           last_recalled_at = ?
+                       WHERE id = ?""",
+                    (boost_amount, now_iso, mem["id"])
+                )
+                boosted.append({
+                    "id": mem["id"],
+                    "content": mem["content"][:80],
+                    "old_confidence": mem.get("confidence", 1.0),
+                    "new_confidence": min(1.0, mem.get("confidence", 1.0) + boost_amount),
+                    "relevance": relevance,
+                })
+
+            conn.commit()
+            if boosted:
+                print(f"[Reconsolidation] Surprise boost: {len(boosted)} related memories strengthened.")
+        except Exception as e:
+            conn.rollback()
+            print(f"[Memory Store] Reconsolidation ERR: {e}")
+        finally:
+            conn.close()
+
+        return boosted

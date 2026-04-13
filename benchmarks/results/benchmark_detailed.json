@@ -1,13 +1,13 @@
 {
   "summary": {
-    "timestamp": "2026-04-07 19:28:31",
+    "timestamp": "2026-04-13 15:09:03",
     "config": "TLCM Full (all features enabled)",
     "total_memories": 200,
     "total_updates": 45,
     "update_success_rate": "45/45",
-    "ingest_time_s": 61.69,
-    "ingest_per_memory_s": 0.3084,
-    "update_time_s": 10.92,
+    "ingest_time_s": 64.19,
+    "ingest_per_memory_s": 0.321,
+    "update_time_s": 5.39,
     "isolation": "PASS",
     "isolation_violations": 0,
     "point_in_time_accuracy": 1.0,
@@ -125,23 +125,23 @@
     "decayed_samples": [
       {
         "content": "Safety protocol requires fume hood for all synthes",
-        "confidence": 0.95
+        "confidence": 0.9666666666666667
       },
       {
         "content": "Weekly standup meetings on Tuesdays at 10am.",
-        "confidence": 0.95
+        "confidence": 0.9666666666666667
       },
       {
         "content": "Equipment calibration needed for spectrometer.",
-        "confidence": 0.95
+        "confidence": 0.9666666666666667
       },
       {
         "content": "Safety incident: minor spill in Lab 3, no injuries",
-        "confidence": 0.95
+        "confidence": 0.9666666666666667
       },
       {
         "content": "All lab notebooks digitized and archived.",
-        "confidence": 0.95
+        "confidence": 0.9666666666666667
       }
     ]
   },

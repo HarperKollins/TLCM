@@ -319,7 +319,7 @@ class MemoryBus:
                     f"recon={analysis.get('reconsolidation_suggestion')})"
                 )
 
-                # Step 4: Proactive Recall Daemon
+                # Step 4: Proactive Recall Daemon + Surprise-Driven Reconsolidation
                 try:
                     stored_id = result["id"] if isinstance(result, dict) else str(result)
                     
@@ -347,6 +347,34 @@ class MemoryBus:
                             "surfaced_past": warnings
                         })
                         logger.info(f"[Bus] Proactive Recall triggered by {stored_id}. Surfaced {len(warnings)} charged historical vectors.")
+
+                    # Step 4b: Surprise-Driven Reconsolidation
+                    # If this new memory is high-urgency, boost related old memories
+                    incoming_urgency = analysis.get("urgency_score", 5)
+                    incoming_emotion = abs(analysis.get("emotional_valence", 0))
+                    if incoming_urgency > 7 or incoming_emotion > 5:
+                        boosted = await asyncio.to_thread(
+                            store.boost_related_memories,
+                            trigger_content=payload.content,
+                            workspace_name=payload.workspace_name,
+                            boost_amount=0.1,
+                            relevance_threshold=0.7,
+                            limit=5,
+                        )
+                        if boosted:
+                            logger.info(
+                                f"[Bus] Surprise Reconsolidation: {len(boosted)} old memories boosted "
+                                f"(triggered by urg={incoming_urgency}, emo={incoming_emotion})"
+                            )
+                            if self._sse_callback:
+                                await self._sse_callback({
+                                    "type": "reconsolidation_boost",
+                                    "workspace": payload.workspace_name,
+                                    "trigger_memory_id": stored_id,
+                                    "boosted_count": len(boosted),
+                                    "boosted_memories": boosted,
+                                })
+
                 except Exception as eval_e:
                     logger.error(f"[Bus] Proactive Recall daemon evaluation failed: {eval_e}")
 

@@ -1,0 +1,300 @@
+{
+  "summary": {
+    "timestamp": "2026-04-13 15:55:55",
+    "benchmark": "LoCoMo-Scale v2.0",
+    "system": "TLCM Full (v0.5)",
+    "total_memories": 1000,
+    "total_updates": 21,
+    "update_success_rate": "16/21",
+    "workspaces": 4,
+    "epochs_total": 32,
+    "ingest_time_s": 383.27,
+    "ingest_per_memory_ms": 383.3,
+    "update_time_s": 2.14,
+    "isolation": "PASS",
+    "isolation_violations": 0,
+    "point_in_time_accuracy": 0.95,
+    "evolution_tracking_accuracy": 1.0,
+    "contradiction_resolution_accuracy": 1.0,
+    "decayed_memories": 35,
+    "fresh_memories": 965,
+    "delta_computed": true,
+    "delta_categories_correct": 4
+  },
+  "point_in_time_detail": [
+    {
+      "id": "LQ01",
+      "correct": true,
+      "memories_checked": 35
+    },
+    {
+      "id": "LQ02",
+      "correct": true,
+      "memories_checked": 35
+    },
+    {
+      "id": "LQ03",
+      "correct": true,
+      "memories_checked": 33
+    },
+    {
+      "id": "LQ04",
+      "correct": true,
+      "memories_checked": 34
+    },
+    {
+      "id": "LQ05",
+      "correct": true,
+      "memories_checked": 34
+    },
+    {
+      "id": "LQ06",
+      "correct": true,
+      "memories_checked": 32
+    },
+    {
+      "id": "LQ07",
+      "correct": true,
+      "memories_checked": 33
+    },
+    {
+      "id": "LQ08",
+      "correct": false,
+      "memories_checked": 33
+    },
+    {
+      "id": "LQ09",
+      "correct": true,
+      "memories_checked": 33
+    },
+    {
+      "id": "LQ10",
+      "correct": true,
+      "memories_checked": 32
+    },
+    {
+      "id": "LQ11",
+      "correct": true,
+      "memories_checked": 32
+    },
+    {
+      "id": "LQ12",
+      "correct": true,
+      "memories_checked": 35
+    },
+    {
+      "id": "LQ13",
+      "correct": true,
+      "memories_checked": 35
+    },
+    {
+      "id": "LQ14",
+      "correct": true,
+      "memories_checked": 33
+    },
+    {
+      "id": "LQ15",
+      "correct": true,
+      "memories_checked": 33
+    },
+    {
+      "id": "LQ16",
+      "correct": true,
+      "memories_checked": 34
+    },
+    {
+      "id": "LQ17",
+      "correct": true,
+      "memories_checked": 32
+    },
+    {
+      "id": "LQ18",
+      "correct": true,
+      "memories_checked": 32
+    },
+    {
+      "id": "LQ19",
+      "correct": true,
+      "memories_checked": 32
+    },
+    {
+      "id": "LQ20",
+      "correct": true,
+      "memories_checked": 32
+    }
+  ],
+  "evolution_detail": [
+    {
+      "id": "LQ61",
+      "has_version_chain": true,
+      "version_count": 7
+    },
+    {
+      "id": "LQ62",
+      "has_version_chain": true,
+      "version_count": 7
+    },
+    {
+      "id": "LQ63",
+      "has_version_chain": true,
+      "version_count": 7
+    },
+    {
+      "id": "LQ64",
+      "has_version_chain": true,
+      "version_count": 4
+    },
+    {
+      "id": "LQ65",
+      "has_version_chain": true,
+      "version_count": 4
+    },
+    {
+      "id": "LQ66",
+      "has_version_chain": true,
+      "version_count": 2
+    },
+    {
+      "id": "LQ67",
+      "has_version_chain": true,
+      "version_count": 2
+    },
+    {
+      "id": "LQ68",
+      "has_version_chain": true,
+      "version_count": 3
+    },
+    {
+      "id": "LQ69",
+      "has_version_chain": true,
+      "version_count": 3
+    },
+    {
+      "id": "LQ70",
+      "has_version_chain": true,
+      "version_count": 7
+    }
+  ],
+  "contradiction_detail": [
+    {
+      "id": "LQ151",
+      "resolved": true,
+      "version_chain_count": 7,
+      "orphaned_count": 0
+    },
+    {
+      "id": "LQ152",
+      "resolved": true,
+      "version_chain_count": 4,
+      "orphaned_count": 0
+    },
+    {
+      "id": "LQ153",
+      "resolved": true,
+      "version_chain_count": 7,
+      "orphaned_count": 0
+    }
+  ],
+  "decay_detail": {
+    "decayed_count": 35,
+    "fresh_count": 965,
+    "decayed_samples": [
+      {
+        "content": "Sensor reading #1: intersection 786 traffic flow 1062 vehicl",
+        "confidence": 0.9666666666666667,
+        "urgency": 5,
+        "emotion": 0
+      },
+      {
+        "content": "Sensor reading #9: intersection 822 traffic flow 230 vehicle",
+        "confidence": 0.9666666666666667,
+        "urgency": 5,
+        "emotion": 0
+      },
+      {
+        "content": "Sensor reading #17: intersection 752 traffic flow 575 vehicl",
+        "confidence": 0.9666666666666667,
+        "urgency": 5,
+        "emotion": 0
+      },
+      {
+        "content": "Sensor reading #25: intersection 330 traffic flow 1144 vehic",
+        "confidence": 0.9666666666666667,
+        "urgency": 5,
+        "emotion": 0
+      },
+      {
+        "content": "Sensor reading #33: intersection 382 traffic flow 1354 vehic",
+        "confidence": 0.9666666666666667,
+        "urgency": 5,
+        "emotion": 0
+      },
+      {
+        "content": "Sensor reading #41: intersection 640 traffic flow 920 vehicl",
+        "confidence": 0.9666666666666667,
+        "urgency": 5,
+        "emotion": 0
+      },
+      {
+        "content": "Sensor reading #49: intersection 199 traffic flow 1794 vehic",
+        "confidence": 0.9666666666666667,
+        "urgency": 5,
+        "emotion": 0
+      },
+      {
+        "content": "Sensor reading #57: intersection 753 traffic flow 1985 vehic",
+        "confidence": 0.9666666666666667,
+        "urgency": 5,
+        "emotion": 0
+      }
+    ]
+  },
+  "delta_detail": [
+    {
+      "workspace": "AI Startup",
+      "from": "Ideation",
+      "to": "Series A",
+      "has_additions": true,
+      "has_continuities": false,
+      "has_evolutions": false,
+      "delta_length": 2142
+    },
+    {
+      "workspace": "Clinical Trial",
+      "from": "Protocol Design",
+      "to": "Regulatory Submission",
+      "has_additions": true,
+      "has_continuities": false,
+      "has_evolutions": false,
+      "delta_length": 1891
+    },
+    {
+      "workspace": "Smart City",
+      "from": "Baseline Audit",
+      "to": "Full Operations",
+      "has_additions": true,
+      "has_continuities": false,
+      "has_evolutions": false,
+      "delta_length": 2426
+    },
+    {
+      "workspace": "Satellite Mission",
+      "from": "Requirements",
+      "to": "Extended Mission",
+      "has_additions": true,
+      "has_continuities": false,
+      "has_evolutions": false,
+      "delta_length": 2055
+    }
+  ],
+  "isolation_detail": {
+    "pass": true,
+    "violations": [],
+    "counts": {
+      "AI Startup": 250,
+      "Clinical Trial": 250,
+      "Smart City": 250,
+      "Satellite Mission": 250
+    }
+  }
+}

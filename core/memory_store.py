@@ -76,6 +76,50 @@ class MemoryStore:
         else:
             epoch = epoch_mgr.get_or_create_active(workspace["id"], workspace_name)
 
+        # Pre-check for local fallback (strengthen) or Core Contradictions (surgery)
+        if reconsolidation_flag in ["strengthen", "contradicts_core"]:
+            conflicting = self.recall(
+                query=content,
+                workspace_name=workspace_name,
+                epoch_name=epoch["name"],
+                limit=1,
+                current_only=False # Surgical strike: Search the past too
+            )
+            
+            if conflicting:
+                target = conflicting[0]
+                target_id = target["id"]
+                relevance = target.get("relevance_score", 0)
+                
+                # Local Fallback (Strengthen/Redundant Bypass)
+                if reconsolidation_flag == "strengthen" and relevance > 0.8:
+                    conn = get_connection()
+                    try:
+                        now_iso = datetime.now().isoformat()
+                        conn.execute(
+                            "UPDATE memories SET confidence = MIN(1.0, confidence + 0.1), recall_count = recall_count + 1, last_recalled_at = ? WHERE id = ?",
+                            (now_iso, target_id)
+                        )
+                        conn.commit()
+                        print(f"[Memory Store] 'strengthen' fallback triggered for {target_id[:8]} - skipping duplicate.")
+                        return {"id": target_id, "workspace": workspace_name, "epoch": epoch["name"], "status": "strengthened"}
+                    finally:
+                        conn.close()
+
+                # True Graph Surgery
+                elif reconsolidation_flag == "contradicts_core" and relevance > 0.4:
+                    print(f"[Surgery] Resolving contradiction natively via explicit graph branch on {target_id[:8]}")
+                    return self.update(
+                        memory_id=target_id,
+                        new_content=content,
+                        reason="Resolving core contradiction natively via graph surgery",
+                        workspace_name=workspace_name,
+                        emotional_valence=emotional_valence,
+                        urgency_score=urgency_score,
+                        semantic_impact=semantic_impact,
+                        reconsolidation_flag=reconsolidation_flag
+                    )
+
         memory_id = new_id()
         conn = get_connection()
         try:
@@ -98,26 +142,6 @@ class MemoryStore:
                 ),
             )
             conn.commit()
-            
-            # Targeted Corrective Surgery (Feature 6)
-            if reconsolidation_flag == "contradicts_core":
-                conflicting = self.recall(
-                    query=content,
-                    workspace_name=workspace_name,
-                    epoch_name=epoch["name"],
-                    limit=1
-                )
-                if conflicting and conflicting[0].get("relevance_score", 0) > 0.5:
-                    target_id = conflicting[0]["id"]
-                    try:
-                        conn.execute(
-                            "UPDATE memories SET confidence = MAX(0.1, confidence - 0.4) WHERE id = ?",
-                            (target_id,)
-                        )
-                        conn.commit()
-                        print(f"[Surgery] Surgically weakened confidence of past memory {target_id[:8]}")
-                    except Exception as seq_e:
-                        print(f"[Surgery] error during reconsolidation surgery: {seq_e}")
             # Store embedding for semantic search
             embedding_engine.embed_and_store(
                 memory_id=memory_id,
@@ -144,6 +168,10 @@ class MemoryStore:
         new_content: str,
         reason: str,
         workspace_name: str,
+        emotional_valence: int = None,
+        urgency_score: int = None,
+        semantic_impact: int = None,
+        reconsolidation_flag: str = None
     ) -> dict:
         """
         TLCM Principle 1: Versioned update — NEVER overwrites.
@@ -152,21 +180,43 @@ class MemoryStore:
         """
         conn = get_connection()
         try:
-            # Fetch the old memory
+            # Fetch the old memory (can be an archived memory if we are doing timeline surgery!)
             old = conn.execute(
-                "SELECT * FROM memories WHERE id = ? AND is_current = 1", (memory_id,)
+                "SELECT * FROM memories WHERE id = ?", (memory_id,)
             ).fetchone()
 
             if not old:
-                raise ValueError(f"Memory {memory_id} not found or already archived.")
+                raise ValueError(f"Memory {memory_id} not found.")
 
             old = dict(old)
 
-            # Archive the old version
-            conn.execute(
-                "UPDATE memories SET is_current = 0, archived_at = ? WHERE id = ?",
-                (datetime.now().isoformat(), memory_id),
-            )
+            if old["is_current"]:
+                # Archive the old version
+                conn.execute(
+                    "UPDATE memories SET is_current = 0, archived_at = ? WHERE id = ?",
+                    (datetime.now().isoformat(), memory_id),
+                )
+            else:
+                # TRUE GRAPH SURGERY: Cascade Orphan
+                # We are branching from an archived memory in the past.
+                # Therefore, any beliefs downstream from it that were previously current
+                # are now on a hallucinated/invalid timeline and must be orphaned.
+                now_iso = datetime.now().isoformat()
+                conn.execute(
+                    """WITH RECURSIVE downstream(id) AS (
+                         SELECT id FROM memories WHERE parent_id = ?
+                         UNION ALL
+                         SELECT m.id FROM memories m JOIN downstream d ON m.parent_id = d.id
+                       )
+                       UPDATE memories 
+                       SET is_current = 0, 
+                           confidence = 0.0,
+                           reconsolidation_flag = 'orphaned_via_surgery',
+                           archived_at = ?
+                       WHERE id IN downstream""",
+                    (memory_id, now_iso)
+                )
+                print(f"[Surgery] Cascade Orphan executed on descendants of {memory_id[:8]}")
 
             # Create the new version (linked to the old via parent_id)
             new_id_ = new_id()
@@ -183,10 +233,10 @@ class MemoryStore:
                     old["version"] + 1,
                     memory_id,
                     reason,
-                    old.get("emotional_valence", 0),
-                    old.get("urgency_score", 5),
-                    old.get("semantic_impact", 5),
-                    old.get("reconsolidation_flag", "append"),
+                    emotional_valence if emotional_valence is not None else old.get("emotional_valence", 0),
+                    urgency_score if urgency_score is not None else old.get("urgency_score", 5),
+                    semantic_impact if semantic_impact is not None else old.get("semantic_impact", 5),
+                    reconsolidation_flag if reconsolidation_flag is not None else old.get("reconsolidation_flag", "append"),
                 ),
             )
 

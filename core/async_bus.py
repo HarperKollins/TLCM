@@ -12,8 +12,11 @@ The CPU never blocks on LLM inference — it just routes.
 import asyncio
 import logging
 import uuid
+import json
 from datetime import datetime
 from typing import Optional, Callable, Awaitable
+
+from core.database import get_connection
 
 logger = logging.getLogger("tlcm.async_bus")
 
@@ -52,7 +55,7 @@ class MemoryBus:
     _instance = None
 
     def __init__(self):
-        self._queue: asyncio.Queue[MemoryPayload] = asyncio.Queue()
+        self._queue: asyncio.Queue[MemoryPayload] = asyncio.Queue(maxsize=500)
         self._chroma_lock = asyncio.Lock()
         self._worker_task: Optional[asyncio.Task] = None
         self._sse_callback: Optional[Callable[[dict], Awaitable[None]]] = None
@@ -101,8 +104,32 @@ class MemoryBus:
             source=source,
             tags=tags,
         )
-        await self._queue.put(payload)
-        self._status_map[temp_id] = {"status": "processing"}
+        
+        # Persist to SQLite queue to prevent data loss on crash
+        conn = get_connection()
+        try:
+            conn.execute(
+                "INSERT INTO async_queue (id, payload, status) VALUES (?, ?, 'pending')",
+                (temp_id, json.dumps(payload.__dict__))
+            )
+            conn.commit()
+        except Exception as e:
+            logger.error(f"[Bus] Failed to persist queue item {temp_id}: {e}")
+        finally:
+            conn.close()
+
+        try:
+            await asyncio.wait_for(self._queue.put(payload), timeout=2.0)
+        except asyncio.TimeoutError:
+            conn = get_connection()
+            try:
+                conn.execute("UPDATE async_queue SET status = 'failed', error_msg = 'Queue Backpressure timeout' WHERE id = ?", (temp_id,))
+                conn.commit()
+            finally:
+                conn.close()
+            raise Exception("Server is under heavy load. Request rejected by backpressure.")
+
+        self._status_map[temp_id] = {"status": "pending"} # was processing, now pending until worker picks it
         logger.info(f"[Bus] Enqueued {temp_id} for '{workspace_name}' (queue size: {self._queue.qsize()})")
         return temp_id
 
@@ -110,6 +137,29 @@ class MemoryBus:
         """Start the background worker loop. Call once at FastAPI startup."""
         if self._running:
             return
+            
+        # Recover pending/crashed jobs from persistent DB
+        conn = get_connection()
+        try:
+            # Set stuck 'processing' back to 'pending' upon restart
+            conn.execute("UPDATE async_queue SET status = 'pending' WHERE status = 'processing'")
+            conn.commit()
+            
+            pending_rows = conn.execute("SELECT id, payload FROM async_queue WHERE status = 'pending' ORDER BY created_at ASC").fetchall()
+            for row in pending_rows:
+                data = json.loads(row["payload"])
+                payload = MemoryPayload(**{k: v for k, v in data.items() if k != 'queued_at'}) # re-init 
+                payload.queued_at = data.get('queued_at', datetime.now().isoformat())
+                
+                self._queue.put_nowait(payload)
+                self._status_map[payload.temp_id] = {"status": "pending"}
+            if pending_rows:
+                logger.info(f"[Bus] Recovered {len(pending_rows)} pending jobs from SQLite queue.")
+        except Exception as e:
+            logger.error(f"[Bus] Failed to recover queue: {e}")
+        finally:
+            conn.close()
+
         self._running = True
         self._worker_task = asyncio.create_task(self._worker_loop())
         logger.info("[Bus] Background memory worker started.")
@@ -139,7 +189,16 @@ class MemoryBus:
                 except asyncio.TimeoutError:
                     continue
 
+                self._status_map[payload.temp_id] = {"status": "processing"}
                 logger.info(f"[Bus] Processing {payload.temp_id}...")
+                
+                # Mark as processing in DB
+                conn = get_connection()
+                try:
+                    conn.execute("UPDATE async_queue SET status = 'processing', updated_at = ? WHERE id = ?", (datetime.now().isoformat(), payload.temp_id))
+                    conn.commit()
+                finally:
+                    conn.close()
 
                 # Step 0: Local Fallback Heuristic
                 local_bypassed = False
@@ -165,21 +224,29 @@ class MemoryBus:
 
                 if not local_bypassed:
                     # Step 1: Run Gemini analysis (offloaded to API, non-blocking for i5)
-                    try:
-                        analysis = await asyncio.to_thread(
-                            analyze_memory,
-                            content=payload.content,
-                            workspace_name=payload.workspace_name,
-                        )
-                    except Exception as e:
-                        logger.error(f"[Bus] Gemini analysis failed for {payload.temp_id}: {e}")
-                        analysis = {
-                            "semantic_delta": "",
-                            "emotional_valence": 0,
-                            "urgency_score": 5,
-                            "semantic_impact": 5,
-                            "reconsolidation_suggestion": "append",
-                        }
+                    max_retries = 3
+                    retry_delay = 1.0
+                    for attempt in range(max_retries):
+                        try:
+                            analysis = await asyncio.to_thread(
+                                analyze_memory,
+                                content=payload.content,
+                                workspace_name=payload.workspace_name,
+                            )
+                            break
+                        except Exception as e:
+                            logger.error(f"[Bus] Gemini analysis failed for {payload.temp_id} (Attempt {attempt+1}/{max_retries}): {e}")
+                            if attempt < max_retries - 1:
+                                await asyncio.sleep(retry_delay)
+                                retry_delay *= 2
+                            else:
+                                analysis = {
+                                    "semantic_delta": "",
+                                    "emotional_valence": 0,
+                                    "urgency_score": 5,
+                                    "semantic_impact": 5,
+                                    "reconsolidation_suggestion": "append",
+                                }
 
                 # Step 2: Commit to SQLite + ChromaDB (under lock for Chroma safety)
                 try:
@@ -202,6 +269,14 @@ class MemoryBus:
                         "status": "error",
                         "error": str(e)
                     }
+                    
+                    conn = get_connection()
+                    try:
+                        conn.execute("UPDATE async_queue SET status = 'failed', error_msg = ?, updated_at = ? WHERE id = ?", (str(e), datetime.now().isoformat(), payload.temp_id))
+                        conn.commit()
+                    finally:
+                        conn.close()
+
                     if self._sse_callback:
                         await self._sse_callback({
                             "type": "memory_error",
@@ -227,11 +302,18 @@ class MemoryBus:
 
                 self._status_map[payload.temp_id] = event_data
 
+                conn = get_connection()
+                try:
+                    conn.execute("UPDATE async_queue SET status = 'completed', updated_at = ? WHERE id = ?", (datetime.now().isoformat(), payload.temp_id))
+                    conn.commit()
+                finally:
+                    conn.close()
+
                 if self._sse_callback:
                     await self._sse_callback(event_data)
 
                 logger.info(
-                    f"[Bus] Committed {payload.temp_id} → {result.get('id', 'updated')[:12]}... "
+                    f"[Bus] Committed {payload.temp_id} → {result.get('id', 'updated')[:12] if isinstance(result, dict) else str(result)[:12]}... "
                     f"(emotion={analysis.get('emotional_valence')}, "
                     f"urgency={analysis.get('urgency_score')}, "
                     f"recon={analysis.get('reconsolidation_suggestion')})"
@@ -244,6 +326,7 @@ class MemoryBus:
                 break
             except Exception as e:
                 logger.error(f"[Bus] Unexpected worker error: {e}")
+                # We could implement a fail/retry here, but wait 1s before continuing
                 await asyncio.sleep(1)
 
     @property

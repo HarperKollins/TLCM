@@ -58,6 +58,42 @@ def ingest_all(mem, ws_mgr, ep_mgr):
                 count += 1
     return count
 
+def run_adversarial_stress_test(mem, ws_mgr, ep_mgr):
+    """Simulates an agent over 30 months with 50 lies and 50 contradictory corrections."""
+    ws_name = "Adversarial Agent"
+    ws = ws_mgr.get_or_create(ws_name, "30-month test with lies and corrections")
+    count = 0
+    # Simulate first 30 months (epochs)
+    for month in range(1, 31):
+        ep_name = f"Month_{month}"
+        ep_mgr.create(ws["id"], ep_name, f"Month {month} observations")
+        
+        # Routine daily memories
+        for day in range(30):
+            mem.remember(f"Routine observation on Day {day} of Month {month}.", ws_name, ep_name)
+            count += 1
+            
+    # Inject 50 contradictions and corrections
+    conn = get_connection()
+    lies_injected = 0
+    corrections_applied = 0
+    for i in range(1, 51):
+        lie = f"Adversarial Fact {i}: The access code is {i}000."
+        mem.remember(lie, ws_name, "Month_10") # Injected in month 10
+        lies_injected += 1
+        
+        # Later, corrected in month 15 via true graph surgery
+        from core.memory_store import MemoryStore
+        mem.commit_memory(
+            content=f"Adversarial Fact {i}: The access code is actually 9999.",
+            workspace_name=ws_name,
+            epoch_name="Month_15",
+            reconsolidation_flag="contradicts_core"
+        )
+        corrections_applied += 1
+    conn.close()
+    return count + lies_injected + corrections_applied
+
 
 def apply_all_updates(mem, updates):
     """Apply updates and return success count."""
@@ -101,6 +137,10 @@ def run_config(config_name, enable_decay=True, enable_delta=True, enable_transac
     t0 = time.time()
     update_success = apply_all_updates(mem, updates)
     update_time = time.time() - t0
+
+    # Adversarial test
+    adv_count = run_adversarial_stress_test(mem, ws_mgr, ep_mgr)
+    count += adv_count
 
     # Decay test
     decay_count = 0

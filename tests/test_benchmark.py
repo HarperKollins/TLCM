@@ -142,7 +142,7 @@ def test_biological_decay():
 def test_corrective_surgery():
     """
     Verifies that inserting a memory with reconsolidation_flag 'contradicts_core'
-    surgically weakens the confidence of the conflicting past memory.
+    surgically archives the conflicting past memory via graph versioning.
     """
     ws_mgr = WorkspaceManager()
     mem = MemoryStore()
@@ -159,12 +159,13 @@ def test_corrective_surgery():
     )
 
     conn = get_connection()
-    c1_initial = conn.execute("SELECT confidence FROM memories WHERE id = ?", (m1["id"],)).fetchone()["confidence"]
+    c1_initial = conn.execute("SELECT confidence, is_current FROM memories WHERE id = ?", (m1["id"],)).fetchone()
     conn.close()
     
-    assert c1_initial == 1.0, "Initial confidence should be 1.0"
+    assert c1_initial["confidence"] == 1.0, "Initial confidence should be 1.0"
+    assert c1_initial["is_current"] == 1, "Initial memory should be current"
 
-    # Insert a contradicting memory. We use the same text so that fake embeddings hit it via distance 0 (relevance 1.0)
+    # Insert a contradicting memory. We use the same text in test mode to hit distance 0 (relevance 1.0)
     m2 = mem.commit_memory(
         content="The Earth is flat.",
         workspace_name="Surgery Test",
@@ -175,9 +176,52 @@ def test_corrective_surgery():
     )
     
     conn = get_connection()
-    c1_final = conn.execute("SELECT confidence FROM memories WHERE id = ?", (m1["id"],)).fetchone()["confidence"]
+    c1_final = conn.execute("SELECT is_current, archived_at FROM memories WHERE id = ?", (m1["id"],)).fetchone()
+    c2_final = conn.execute("SELECT parent_id, is_current FROM memories WHERE id = ?", (m2["new_id"],)).fetchone()
     conn.close()
 
-    assert c1_final < c1_initial, f"Surgical weakening failed. Expected drop, got {c1_final}"
-    assert c1_final == max(0.1, c1_initial - 0.4), "Confidence weakened by wrong amount"
-    print("[Benchmark] CORRECTIVE SURGERY: PASSED - Conflicting memory surgically weakened.")
+    assert c1_final["is_current"] == 0, "Surgical weakening failed. Expected old memory to be explicitly archived."
+    assert c1_final["archived_at"] is not None, "Expected old memory to have an archived_at timestamp."
+    assert c2_final["parent_id"] == m1["id"], "Expected new memory to explicitly branch from the old baseline."
+    assert c2_final["is_current"] == 1, "Expected new memory to become the current active version."
+
+    print("[Benchmark] TRUE CORRECTIVE SURGERY: PASSED - Conflicting memory surgically branched and archived.")
+
+
+def test_local_fallback_strengthen():
+    """
+    Verifies that redundant information skips explicit insertions and bolsters existing facts gracefully.
+    """
+    ws_mgr = WorkspaceManager()
+    mem = MemoryStore()
+
+    ws_mgr.get_or_create("Fallback Test", "...")
+    
+    m1 = mem.commit_memory(
+        content="It rains in April.",
+        workspace_name="Fallback Test",
+        reconsolidation_flag="append"
+    )
+
+    conn = get_connection()
+    baseline = conn.execute("SELECT confidence, recall_count FROM memories WHERE id = ?", (m1["id"],)).fetchone()
+    conn.close()
+
+    # Hit the same fact using 'strengthen' fallback directly (relevance will be 1.0 via mock)
+    m2 = mem.commit_memory(
+        content="It rains in April.", # identical text triggers 1.0 relevance in test_mode hashing
+        workspace_name="Fallback Test",
+        reconsolidation_flag="strengthen"
+    )
+    
+    conn = get_connection()
+    final = conn.execute("SELECT confidence, recall_count FROM memories WHERE id = ?", (m1["id"],)).fetchone()
+    new_mem = conn.execute("SELECT count(*) as c FROM memories WHERE workspace_id = (SELECT id FROM workspaces WHERE name='Fallback Test')").fetchone()
+    conn.close()
+
+    assert m2["id"] == m1["id"], "Expected fallback to return the identical memory ID, skipping insertion."
+    assert m2.get("status") == "strengthened", "Expected returned status to be 'strengthened'."
+    assert final["recall_count"] > baseline["recall_count"], "Expected the old memories recall count to increase."
+    assert new_mem["c"] == 1, "Expected only 1 distinct row in the memory store, redundant insertion happened!"
+
+    print("[Benchmark] LOCAL FALLBACK: PASSED - Redundant info bypasses standard ingestion successfully.")

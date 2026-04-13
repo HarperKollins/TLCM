@@ -23,7 +23,7 @@ from core.database import init_db
 from core.async_bus import MemoryBus
 
 # Import routers
-from server.routers import workspaces, epochs, memories, jump
+from server.routers import workspaces, epochs, memories, jump, export
 
 # Configure logging
 logging.basicConfig(
@@ -86,6 +86,7 @@ app.include_router(workspaces.router, prefix="/api/workspaces", tags=["Workspace
 app.include_router(epochs.router, prefix="/api/epochs", tags=["Epochs"])
 app.include_router(memories.router, prefix="/api/memories", tags=["Memories"])
 app.include_router(jump.router, prefix="/api/jump", tags=["Temporal Jump"])
+app.include_router(export.router, prefix="/api/export", tags=["Backup & Export"])
 
 
 @app.get("/")

@@ -51,6 +51,30 @@ async def store_memory(req: MemoryStoreReq):
         raise HTTPException(status_code=400, detail=str(e))
 
 
+@router.get("/queue/metrics")
+def get_queue_metrics():
+    """
+    Returns metrics on the internal async event queue, useful
+    to detect backpressure or overload scenarios.
+    """
+    bus = MemoryBus.get_instance()
+    queue_size = bus.queue_size
+    from core.database import get_connection
+    conn = get_connection()
+    try:
+        pending_count = conn.execute("SELECT COUNT(*) as c FROM async_queue WHERE status = 'pending'").fetchone()["c"]
+        processing_count = conn.execute("SELECT COUNT(*) as c FROM async_queue WHERE status = 'processing'").fetchone()["c"]
+    finally:
+        conn.close()
+    
+    return {
+        "memory_queue_size": queue_size,
+        "max_capacity": 500,
+        "pending_in_db": pending_count,
+        "processing_in_db": processing_count
+    }
+
+
 @router.get("/status/{temp_id}")
 def get_memory_status(temp_id: str):
     """

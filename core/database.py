@@ -100,6 +100,17 @@ def init_db():
         CREATE INDEX IF NOT EXISTS idx_memories_current ON memories(is_current);
         CREATE INDEX IF NOT EXISTS idx_memories_parent ON memories(parent_id);
         CREATE INDEX IF NOT EXISTS idx_epochs_workspace ON epochs(workspace_id);
+
+        -- ASYNC QUEUE: Persistent Tier 1 STM queue
+        CREATE TABLE IF NOT EXISTS async_queue (
+            id TEXT PRIMARY KEY,
+            payload TEXT NOT NULL,
+            status TEXT DEFAULT 'pending', -- pending, processing, completed, failed
+            retry_count INTEGER DEFAULT 0,
+            error_msg TEXT,
+            created_at TEXT DEFAULT (datetime('now')),
+            updated_at TEXT DEFAULT (datetime('now'))
+        );
     """)
 
     # Safely try to add new columns to an existing DB (migration)

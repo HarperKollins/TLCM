@@ -1,0 +1,18 @@
+version: '3.8'
+
+services:
+  tlcm-engine:
+    build: .
+    container_name: tlcm-engine
+    ports:
+      - "8000:8000"
+    volumes:
+      - tlcm_data:/app/data
+    environment:
+      # Inject your Google Gemini API key to activate the biological processing engine
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
+    restart: unless-stopped
+
+volumes:
+  tlcm_data:
+    name: tlcm_persistent_memory

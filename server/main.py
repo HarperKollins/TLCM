@@ -18,6 +18,8 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse
 from sse_starlette.sse import EventSourceResponse
 from core.database import init_db
 from core.async_bus import MemoryBus
@@ -87,6 +89,15 @@ app.include_router(epochs.router, prefix="/api/epochs", tags=["Epochs"])
 app.include_router(memories.router, prefix="/api/memories", tags=["Memories"])
 app.include_router(jump.router, prefix="/api/jump", tags=["Temporal Jump"])
 app.include_router(export.router, prefix="/api/export", tags=["Backup & Export"])
+
+# Mount Universal Dashboard statically (for Docker single-container launch)
+DIST_DIR = Path(__file__).parent.parent / "tlcm-web" / "dist"
+if DIST_DIR.exists() and DIST_DIR.is_dir():
+    app.mount("/dashboard", StaticFiles(directory=str(DIST_DIR), html=True), name="dashboard")
+    logging.info(f"[TLCM] Universal Dashboard mounted at /dashboard")
+else:
+    logging.warning(f"[TLCM] Dist directory not found at {DIST_DIR}. Dashboard UI heavily requires 'npm run build' first.")
+
 
 
 @app.get("/")

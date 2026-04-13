@@ -259,14 +259,42 @@ TLCM uses `all-minilm` locally for zero-latency semantic indexing without sendin
 ollama pull all-minilm
 ```
 
-### 3. Configure Gemini API (Required for v0.4)
+### 3. Configure Gemini API (Required for v0.5)
 Create a `.env` file in the project root:
 ```bash
 GEMINI_API_KEY=your_gemini_api_key_here
 ```
 Get a free API key from [Google AI Studio](https://aistudio.google.com/apikey).
 
-### 4. The Terminal CLI
+### 4. The Universal Docker Deployment (Recommended)
+You can run the entire memory stack (FastAPI Backend + SQLite/ChromaDB + React Dashboard UI) effortlessly using Docker. It natively maps the visual `tlcm-web` build right into your HTTP backend.
+```bash
+docker-compose up -d --build
+```
+- **REST API:** `http://localhost:8000/api`
+- **Visual Dashboard:** `http://localhost:8000/dashboard`
+
+### 5. Python Application Usage (SDK)
+You can install TLCM directly into your own Python applications.
+```bash
+pip install -e .
+```
+Then use the abstracted cross-network synchronous SDK in your LLM agent's thought loop:
+```python
+from tlcm_client import TLCMClient
+
+client = TLCMClient("http://localhost:8000")
+
+# Instantly trigger STM memory insertion (No lag to your user)
+client.remember("I am starting a massive research project.", workspace="Alpha_Lab")
+
+# Native Proactive Recall listening (SSE Stream)
+for event in client.listen_for_events():
+    if event.get("type") == "proactive_context":
+        print(f"Agent Warning: Triggered dark archive memory! {event['surfaced_past']}")
+```
+
+### 6. The Terminal CLI
 ```bash
 cd tlcm-engine
 
@@ -300,14 +328,15 @@ Endpoints:
 - `POST /api/jump` — temporal jump with Gemini analysis
 - `POST /api/jump/delta` — raw mathematical delta (no LLM)
 
-### 6. The Visual Dashboard
+### 7. The Visual Dashboard (Development Mode)
+If you aren't using the Docker Universal Image, you can run the UI directly:
 ```bash
 cd tlcm-web
 npm install
 npm run dev
 ```
 
-### 7. Run the Benchmark Suite
+### 8. Run the Benchmark Suite
 ```bash
 # Full benchmark (mocked, fast, no GPU/API needed)
 python -X utf8 -m pytest tests/test_benchmark.py -v -s

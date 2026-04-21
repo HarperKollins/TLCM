@@ -16,6 +16,7 @@ for significantly better temporal reasoning on nuanced deltas.
 """
 
 import os
+import logging
 from pathlib import Path
 from dotenv import load_dotenv
 from .database import get_connection, new_id
@@ -25,33 +26,22 @@ from .memory_store import MemoryStore
 
 load_dotenv(Path(__file__).parent.parent / ".env")
 
+logger = logging.getLogger("tlcm.temporal_jump")
+
 workspace_mgr = WorkspaceManager()
 epoch_mgr = EpochManager()
 memory_store = MemoryStore()
 
-GEMINI_MODEL = "gemini-3.1-flash-lite-preview"
 
-
-def _call_gemini(system_prompt: str, user_prompt: str) -> str:
-    """Call Gemini API for temporal analysis. Falls back gracefully."""
-    from google import genai
-    api_key = os.environ.get("GEMINI_API_KEY")
-    if not api_key:
-        return "[Error] GEMINI_API_KEY not set. Cannot perform temporal analysis."
-    
-    client = genai.Client(api_key=api_key)
-    prompt = f"""SYSTEM: {system_prompt}
-
-USER: {user_prompt}"""
-    
-    try:
-        response = client.models.generate_content(
-            model=GEMINI_MODEL,
-            contents=prompt,
-        )
-        return response.text
-    except Exception as e:
-        return f"[Error] Gemini API call failed: {e}"
+def _call_cognition(system_prompt: str, user_prompt: str) -> str:
+    """
+    Route cognition calls through the provider factory.
+    Supports Gemini (cloud) and Ollama (air-gapped) based on config.
+    """
+    from .providers.factory import get_cognition_provider
+    provider = get_cognition_provider()
+    combined = f"{system_prompt}\n\n{user_prompt}"
+    return provider.calculate_temporal_delta(system_prompt, user_prompt, combined)
 
 
 def _format_memories(memories: list[dict]) -> str:
@@ -66,17 +56,6 @@ def _format_memories(memories: list[dict]) -> str:
 
 
 class TemporalJumpEngine:
-    def jump(
-        self,
-        workspace_name: str,
-        from_epoch_name: str,
-        to_epoch_name: str = None,
-        query: str = None,
-    ) -> str:
-        """
-        Perform a temporal jump between two epochs within a workspace.
-        Reconstructs the world-state at each epoch and maps the arc between them.
-        """
     def calculate_delta(self, workspace_name: str, from_epoch_name: str, to_epoch_name: str = None) -> dict:
         workspace = workspace_mgr.get(workspace_name)
         if not workspace:
@@ -158,9 +137,9 @@ class TemporalJumpEngine:
             query=query,
         )
 
-        print(f"[TemporalJump] Jumping: '{from_epoch_name}' -> '{to_epoch_name}' in workspace '{workspace_name}'...")
+        logger.info(f"[TemporalJump] Jumping: '{from_epoch_name}' -> '{to_epoch_name}' in workspace '{workspace_name}'...")
 
-        # Run through Gemini API (or return raw prompt in test mode)
+        # Route through provider factory (Gemini or Ollama based on COGNITION_BACKEND)
         if os.environ.get("TLCM_TEST_MODE") == "1":
             result = prompt
         else:
@@ -169,7 +148,7 @@ class TemporalJumpEngine:
                 "how a given context evolved across time. Be specific, honest, and analytical. "
                 "Do not hallucinate -- only reference the facts provided."
             )
-            result = _call_gemini(system_prompt, prompt)
+            result = _call_cognition(system_prompt, prompt)
 
         # Log the jump
         conn = get_connection()
@@ -264,7 +243,5 @@ Explain:
 
         if os.environ.get("TLCM_TEST_MODE") == "1":
             return prompt
-        return _call_gemini(
-            "You are a temporal reasoning analyst. Be concise and analytical.",
-            prompt
-        )
+        system_prompt = "You are a temporal reasoning analyst. Be concise and analytical."
+        return _call_cognition(system_prompt, prompt)

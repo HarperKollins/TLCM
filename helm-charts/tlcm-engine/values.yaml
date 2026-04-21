@@ -1,0 +1,28 @@
+replicaCount: 1
+
+image:
+  repository: tlcm/engine
+  pullPolicy: IfNotPresent
+  tag: "latest"
+
+service:
+  type: ClusterIP
+  port: 8000
+
+env:
+  COGNITION_BACKEND: "gemini"
+  VECTOR_STORE_PROVIDER: "chromadb"
+  RELATIONAL_STORE_PROVIDER: "postgres"
+  # TLCM_API_KEY: "secret"
+  
+persistence:
+  enabled: true
+  size: 10Gi
+
+resources:
+  requests:
+    memory: "512Mi"
+    cpu: "500m"
+  limits:
+    memory: "2Gi"
+    cpu: "2"

@@ -1,22 +1,22 @@
-import json
 import httpx
 from typing import Optional, Dict, Any, Generator
+import json
 
 class TLCMClient:
     """
     Official Python SDK for the TLCM (Temporal Layered Context Memory) Engine.
-    Abstracts REST API calls and real-time Server-Sent Events (SSE) into a simple developer interface.
+    Version 1 - REST Architecture.
     """
     
-    def __init__(self, api_base: str = "http://127.0.0.1:8000/api"):
+    def __init__(self, api_key: str = None, api_base: str = "http://127.0.0.1:8000/api/v1"):
         self.api_base = api_base.rstrip('/')
-        self.http_client = httpx.Client(timeout=30.0)
+        headers = {}
+        if api_key:
+            headers["Authorization"] = f"Bearer {api_key}"
+            
+        self.http_client = httpx.Client(timeout=30.0, headers=headers)
 
     def remember(self, content: str, workspace: str = "default_workspace", epoch: Optional[str] = None) -> Dict[str, Any]:
-        """
-        Ingest a memory into the Tier 1 STM Queue. Non-blocking backend processing.
-        Returns the temp_id immediately.
-        """
         payload = {
             "content": content,
             "workspace": workspace,
@@ -71,7 +71,8 @@ class TLCMClient:
         Listen to the SSE stream continuously.
         Yields real-time events including Cascade Orphaning notices and Proactive Recall bursts.
         """
-        with httpx.stream("GET", f"{self.api_base}/events", timeout=None) as response:
+        # Ensure we pass the headers established in the client so SSE passes the API Key Middleware
+        with httpx.stream("GET", f"{self.api_base}/events", timeout=None, headers=self.http_client.headers) as response:
             for line in response.iter_lines():
                 if line.startswith("data: "):
                     try:

@@ -1,0 +1,35 @@
+{
+  "name": "@tlcm/client",
+  "version": "1.0.0",
+  "description": "Official TypeScript SDK for the Temporal Layered Context Memory (TLCM) Engine",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "files": [
+    "dist/**/*"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "clean": "rimraf dist",
+    "prepublishOnly": "npm run build"
+  },
+  "keywords": [
+    "memory",
+    "ai",
+    "tlcm",
+    "temporal",
+    "context",
+    "long-term-memory",
+    "sdk"
+  ],
+  "author": "Collins Somtochukwu",
+  "license": "MIT",
+  "dependencies": {
+    "axios": "^1.6.8",
+    "eventsource": "^2.0.2"
+  },
+  "devDependencies": {
+    "typescript": "^5.4.5",
+    "@types/node": "^20.12.7",
+    "@types/eventsource": "^1.1.15"
+  }
+}

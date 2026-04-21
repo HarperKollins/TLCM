@@ -19,9 +19,12 @@ from dotenv import load_dotenv
 # Load .env from project root
 load_dotenv(Path(__file__).parent.parent / ".env")
 
+from .config import settings
+
 logger = logging.getLogger("tlcm.gemini_judge")
 
-GEMINI_MODEL = "gemini-3.1-flash-lite-preview"
+# Read model from config (overridable via GEMINI_MODEL env var)
+GEMINI_MODEL = settings.backend.model_name
 
 # Structured output schema for Gemini
 ANALYSIS_SCHEMA = {
@@ -81,11 +84,15 @@ def _with_retry(func):
 
 
 def _get_client():
-    """Lazy-load Gemini client."""
+    """Lazy-load Gemini client using config API key."""
     from google import genai
-    api_key = os.environ.get("GEMINI_API_KEY")
+    api_key = settings.backend.api_key or os.environ.get("GEMINI_API_KEY")
     if not api_key:
-        raise RuntimeError("GEMINI_API_KEY not set. Check your .env file.")
+        raise RuntimeError(
+            "[TLCM] GEMINI_API_KEY not set. Add it to your .env file:\n"
+            "  GEMINI_API_KEY=your_key_here\n"
+            "Or set COGNITION_BACKEND=ollama for air-gapped operation."
+        )
     return genai.Client(api_key=api_key)
 
 

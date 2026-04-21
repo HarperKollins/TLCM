@@ -1,19 +1,14 @@
-"""
-TLCM Embedding Engine
-Uses Ollama's nomic-embed-text (or llama3.2) for local embeddings.
-ChromaDB stores vectors per workspace/epoch for isolated semantic search.
-"""
-
 import chromadb
 from chromadb.config import Settings
 from pathlib import Path
 import ollama
 
 import os
+from .config import settings
 
-CHROMA_PATH = Path(__file__).parent.parent / "data" / "chroma"
-EMBEDDING_DIM = 384  # Updated for all-minilm
-EMBEDDING_MODEL = "all-minilm"
+CHROMA_PATH = Path(settings.store.data_dir) / "chroma"
+EMBEDDING_DIM = settings.embedding.dimension
+EMBEDDING_MODEL = settings.embedding.model_name
 
 
 # Singleton client cache (avoid recreating on every call)
@@ -44,14 +39,26 @@ def _collection_name(workspace_name: str) -> str:
 
 def _embed(text: str) -> list[float]:
     """
-    Get embedding from Ollama using all-minilm (super fast CPU local).
+    Get embedding from Ollama using the configured model.
     In test mode (TLCM_TEST_MODE=1), returns a deterministic dummy vector.
+    Falls back gracefully if Ollama model is not available.
     """
     if os.environ.get("TLCM_TEST_MODE") == "1":
         h = hash(text) % 1000 / 1000.0
         return [h + 0.001 * i for i in range(EMBEDDING_DIM)]
-    response = ollama.embeddings(model=EMBEDDING_MODEL, prompt=text)
-    return response["embedding"]
+    try:
+        response = ollama.embeddings(model=EMBEDDING_MODEL, prompt=text)
+        return response["embedding"]
+    except Exception as e:
+        err_msg = str(e).lower()
+        if "not found" in err_msg or "pull" in err_msg or "connection" in err_msg:
+            raise RuntimeError(
+                f"[TLCM] Embedding model '{EMBEDDING_MODEL}' is not available. "
+                f"Please run: ollama pull {EMBEDDING_MODEL}\n"
+                f"Or change EMBEDDING_MODEL in your .env file.\n"
+                f"Original error: {e}"
+            )
+        raise
 
 
 def _trigger_migration(client, collection_name: str, workspace_name: str):

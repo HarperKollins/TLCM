@@ -1,0 +1,30 @@
+site_name: TLCM Engine Documentation
+site_description: Temporal Layered Context Memory Engine - Biological Edge-Optimized memory for AI Agents
+site_author: Collins Somtochukwu
+site_url: https://tlcm.dev
+theme:
+  name: material
+  features:
+    - navigation.tabs
+    - navigation.sections
+    - navigation.top
+    - toc.integrate
+  palette:
+    - scheme: default
+      primary: indigo
+      accent: deep purple
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+    - scheme: slate
+      primary: indigo
+      accent: deep purple
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
+
+nav:
+  - Welcome to TLCM: index.md
+  - Architecture Guides:
+    - Custom Providers: providers.md
+    - Enterprise Scaling via Helm: helm.md

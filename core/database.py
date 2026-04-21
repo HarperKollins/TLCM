@@ -8,8 +8,9 @@ import sqlite3
 import uuid
 from datetime import datetime
 from pathlib import Path
+from .config import settings
 
-DB_PATH = Path(__file__).parent.parent / "data" / "tlcm.db"
+DB_PATH = Path(settings.store.data_dir) / "tlcm.db"
 
 
 def get_connection() -> sqlite3.Connection:

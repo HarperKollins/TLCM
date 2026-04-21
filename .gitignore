@@ -31,6 +31,15 @@ tlcm-web/dist/
 tlcm-web/dist-ssr/
 tlcm-web/*.local
 
+# SDK Dependencies
+sdk/typescript/*/node_modules/
+node_modules/
+
+# Build Artifacts
+*.egg-info/
+dist/
+build/
+
 # Logs
 logs/
 *.log

@@ -4,6 +4,10 @@
 
 **TLCM** is a neuro-inspired AI memory engine built to solve the structural failures of current Large Language Model memory architectures. Instead of relying on sprawling, chaotic vector dumps or flat un-versioned updates, TLCM implements time and context as fundamental, first-class architectural dimensions.
 
+[![Tests](https://img.shields.io/badge/unit_tests-46%2F46_passing-brightgreen)]()
+[![Version](https://img.shields.io/badge/version-0.5.0-blue)]()
+[![License](https://img.shields.io/badge/license-MIT-green)]()
+
 ---
 
 ## The Structural Problem
@@ -48,10 +52,32 @@ Where:
 - $\mathcal{U}$ is Urgency Score $(0 - 10)$
 - $\mathcal{E}$ is Emotional Valence $(-10 \dots +10)$
 
+The decay daemon runs automatically as a periodic background task (default: 24h cycle, configurable via `TLCM_DECAY_INTERVAL_SECONDS`). Manual trigger available at `POST /api/v1/decay/run`.
+
 ---
 
 ## Surprise-Driven Reconsolidation
 When a new high-urgency memory ($\mathcal{U} > 7$) arrives, the background daemon automatically surfaces semantically related older memories and actively boosts their confidence ($\mathcal{C}_{t} = \mathcal{C}_{t} + 0.1$). This is pure neuroscience replication: highly charged new events reinforce associated older memories.
+
+---
+
+## Pluggable Cognition Architecture
+
+TLCM's cognition backend can be **seamlessly toggled** between cloud and air-gapped operation:
+
+| Backend | Provider | Use Case |
+|---|---|---|
+| `gemini` (default) | Gemini 3.1 Flash Lite | Cloud, high-precision neuro-scoring |
+| `ollama` | Any local Ollama model | Air-gapped, privacy-preserving, edge |
+
+```bash
+# Toggle via environment variable
+COGNITION_BACKEND=gemini   # Cloud mode (default)
+COGNITION_BACKEND=ollama   # Air-gapped mode
+OLLAMA_COGNITION_MODEL=gemma2:2b  # Choose any local model
+```
+
+Custom providers (OpenAI, Anthropic, etc.) can be added by subclassing `CognitionProvider` in `core/interfaces.py`.
 
 ---
 
@@ -71,6 +97,7 @@ A mathematical limit via ChromaDB metadata filtering ensures `P(Retrieval | Work
 | **Contradiction Physics** | **Cascade Orphaning** | Overwrite/Delete | Edge Reweighting | LLM Selection |
 | **Decay Mechanism** | **Neuro-Weighted Math** | Custom/None | None | Eviction Policies |
 | **Semantic Delta** | **Pre-computed Python Sets** | LLM Hallucinated diff | LLM hallucinated diff | Search |
+| **Pluggable Backend** | **Gemini / Ollama / Custom** | OpenAI Only | OpenAI/Azure | OpenAI Only |
 
 ---
 
@@ -83,6 +110,24 @@ TLCM scaled to a 1000+ deterministic node graph evaluation via the LoCoMo contex
 | Point-in-Time Retrieval | **98.8%** | Maintains exact timeline snapshots without future-state leakage. |
 | Evolution Tracking | **98.3%** | Successfully traverses full DAG parent chains continuously. |
 | Contradiction Resolution | **100%** | Cascade Orphaning flawlessly eliminates all outdated graph branches. |
+
+---
+
+## Unit Test Coverage (46/46 Passing)
+
+| Test Suite | Tests | Coverage |
+|---|---|---|
+| Memory Store | 11 | remember, recall, update, version chains |
+| Graph Surgery | 6 | Cascade orphaning, confidence zeroing |
+| Workspace Isolation | 5 | Cross-workspace zero-bleed proof |
+| Temporal Jump | 8 | Delta calculation, additions detection |
+| Decay Math | 6 | Ebbinghaus equation, floor, urgency/emotion resistance |
+| Epoch Lifecycle | 10 | Create, list, close, active state |
+
+```bash
+# Run all tests (no GPU required)
+TLCM_TEST_MODE=1 python -m pytest tests/unit/ -v
+```
 
 ---
 
@@ -114,28 +159,61 @@ TLCM executes orchestration natively on edge devices leveraging an asynchronous 
 
 ### 1. Install Dependencies
 ```bash
-pip install -r requirements.txt
+pip install -e .
 ```
 
-### 2. Configure Backend Engine (Gemini / Ollama)
-In your `.env` file, configure the judge parameters:
+### 2. Configure Backend Engine
+Create a `.env` file in the project root:
 ```env
-# Define the cognition backend (Options: gemini | ollama)
+# Cognition backend (gemini or ollama)
 COGNITION_BACKEND=gemini
 GEMINI_API_KEY=your_key_here
+
+# Optional: Secure the API
+TLCM_API_KEY=super_secret_key
+
+# Optional: Air-gapped mode
+# COGNITION_BACKEND=ollama
+# OLLAMA_COGNITION_MODEL=gemma2:2b
 ```
-For air-gapped environments, setting the flag to `ollama` natively falls back to utilizing local compute.
 
 ### 3. Run the Slim Node Server
 ```bash
 python -m uvicorn server.main:app --reload --port 8000
 ```
 
+### 4. Dashboard
+The web dashboard is available at `http://localhost:8000/dashboard` (requires building the frontend first):
+```bash
+cd tlcm-web && npm install && npm run build
+```
+
+### 5. API Endpoints
+| Method | Endpoint | Description |
+|---|---|---|
+| `POST` | `/api/v1/memories/remember` | Async memory ingestion via bus |
+| `POST` | `/api/v1/memories/remember/sync` | Synchronous memory storage |
+| `POST` | `/api/v1/memories/recall` | Semantic memory recall |
+| `GET` | `/api/v1/memories/{id}` | Fetch single memory |
+| `GET` | `/api/v1/memories/{id}/history` | Version chain |
+| `POST` | `/api/v1/workspaces/` | Create workspace |
+| `DELETE` | `/api/v1/workspaces/{name}` | Delete workspace |
+| `POST` | `/api/v1/epochs/` | Create epoch |
+| `POST` | `/api/v1/jump/delta` | Temporal jump delta |
+| `GET` | `/api/v1/health` | Health check |
+| `POST` | `/api/v1/decay/run` | Manual decay trigger |
+| `GET` | `/api/v1/events` | SSE event stream |
+
+### SDKs
+- **Python:** `pip install tlcm-client` — see `sdk/python/`
+- **TypeScript:** `npm install tlcm-client` — see `sdk/typescript/`
+- **LangChain:** Native integration via `integrations/langchain/`
+- **Letta/MemGPT:** Archival memory adapter via `integrations/letta/`
+
 ---
 
 ## Limitations & Future Work
 We recognize several boundaries in the v0.5 architecture targeting deployment at scale:
-- **Gemini Dependency:** Current high-precision neuro-scoring relies on Gemini. Localizing this safely via customized quantized SLMs is targeted for v0.6.
 - **Node Sync:** Multi-agent temporal synchronization across distributed TLCM edge nodes requires vector clock synchronization logic.
 - **Scale:** Scaling beyond 2M memories per workspace may require Sharded ChromaDB clusters.
 - **RL-Driven Reconsolidation:** Next-generation reconsolidation will look into Reinforcement Learning directly mapped to survival heuristics. 

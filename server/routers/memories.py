@@ -17,6 +17,7 @@ from core.workspace import WorkspaceManager
 from core.epoch import EpochManager
 from core.async_bus import MemoryBus
 from server.models import MemoryStoreReq, MemoryUpdateReq, MemoryRecallReq
+from core.database import get_connection
 
 router = APIRouter()
 memory = MemoryStore()
@@ -137,6 +138,21 @@ def get_memory_history(memory_id: str):
     if not chain:
         raise HTTPException(status_code=404, detail="Memory not found")
     return chain
+
+
+@router.get("/{memory_id}")
+def get_memory(memory_id: str):
+    """
+    Fetch a single memory by ID — needed for SDK completeness and dashboard detail views.
+    """
+    conn = get_connection()
+    try:
+        row = conn.execute("SELECT * FROM memories WHERE id=?", (memory_id,)).fetchone()
+    finally:
+        conn.close()
+    if not row:
+        raise HTTPException(status_code=404, detail="Memory not found")
+    return dict(row)
 
 
 @router.get("/workspace/{workspace_name}/epoch/{epoch_name}")

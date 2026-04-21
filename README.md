@@ -5,10 +5,18 @@
 **TLCM** is a neuro-inspired AI memory engine built to solve the structural failures of current Large Language Model memory architectures. Instead of relying on sprawling, chaotic vector dumps or flat un-versioned updates, TLCM implements time and context as fundamental, first-class architectural dimensions.
 
 [![Tests](https://img.shields.io/badge/unit_tests-46%2F46_passing-brightgreen)]()
-[![Version](https://img.shields.io/badge/version-0.5.0-blue)]()
+[![PyPI version](https://img.shields.io/pypi/v/tlcm-engine.svg)](https://pypi.org/project/tlcm-engine/)
+[![Version](https://img.shields.io/badge/version-0.5.1-blue)]()
 [![License](https://img.shields.io/badge/license-MIT-green)]()
 
 ---
+
+## Installation
+
+You can now natively install the complete TLCM engine via PyPI:
+```bash
+pip install tlcm-engine
+```
 
 ## The Structural Problem
 

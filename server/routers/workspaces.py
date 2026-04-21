@@ -44,7 +44,14 @@ def delete_workspace(name: str):
         raise HTTPException(status_code=404, detail="Workspace not found")
     conn = get_connection()
     try:
+        # Cascade delete explicitly to avoid FOREIGN KEY constraint failure
+        conn.execute("PRAGMA foreign_keys=OFF")
+        conn.execute("DELETE FROM temporal_jumps WHERE workspace_id=?", (ws["id"],))
+        conn.execute("DELETE FROM cross_workspace_links WHERE source_workspace_id=? OR target_workspace_id=?", (ws["id"], ws["id"]))
+        conn.execute("DELETE FROM memories WHERE workspace_id=?", (ws["id"],))
+        conn.execute("DELETE FROM epochs WHERE workspace_id=?", (ws["id"],))
         conn.execute("DELETE FROM workspaces WHERE id=?", (ws["id"],))
+        conn.execute("PRAGMA foreign_keys=ON")
         conn.commit()
         return {"status": "deleted", "workspace": name}
     finally:

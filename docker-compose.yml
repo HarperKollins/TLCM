@@ -6,13 +6,25 @@ services:
     container_name: tlcm-engine
     ports:
       - "8000:8000"
+    environment:
+      - COGNITION_BACKEND=${COGNITION_BACKEND:-gemini}
+      - GEMINI_API_KEY=${GEMINI_API_KEY:-}
+      - TLCM_CORS_ORIGINS=*
+      - TLCM_DATA_DIR=/app/data
     volumes:
       - tlcm_data:/app/data
-    environment:
-      # Inject your Google Gemini API key to activate the biological processing engine
-      - GEMINI_API_KEY=${GEMINI_API_KEY}
     restart: unless-stopped
+
+  # Optional local Ollama if air-gapped deployment is preferred
+  # Expose it here to the TLCM Engine directly
+  # ollama:
+  #   image: ollama/ollama
+  #   ports:
+  #     - "11434:11434"
+  #   volumes:
+  #     - ollama_data:/root/.ollama
+  #   restart: unless-stopped
 
 volumes:
   tlcm_data:
-    name: tlcm_persistent_memory
+  # ollama_data:
